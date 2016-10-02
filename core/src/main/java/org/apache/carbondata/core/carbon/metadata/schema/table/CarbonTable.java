@@ -330,6 +330,19 @@ public class CarbonTable implements Serializable {
     return null;
   }
 
+  public List<ColumnSchema> getAllColumnSchema(String tableName) {
+    List<ColumnSchema> columnSchemas = new ArrayList<>();
+    List<CarbonMeasure> measureList = tableMeasuresMap.get(tableName);
+    List<CarbonDimension> dimList = tableDimensionsMap.get(tableName);
+    for (CarbonDimension dimension : dimList) {
+      columnSchemas.add(dimension.getColumnSchema());
+    }
+    for (CarbonMeasure measure : measureList) {
+      columnSchemas.add(measure.getColumnSchema());
+    }
+    return columnSchemas;
+  }
+
   /**
    * gets all children dimension for complex type
    *

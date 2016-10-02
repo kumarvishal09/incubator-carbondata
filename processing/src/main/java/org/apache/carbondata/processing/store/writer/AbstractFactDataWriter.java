@@ -60,9 +60,12 @@ import org.apache.carbondata.core.util.CarbonMergerUtil;
 import org.apache.carbondata.core.util.CarbonMetadataUtil;
 import org.apache.carbondata.core.util.CarbonProperties;
 import org.apache.carbondata.core.util.CarbonUtil;
+import org.apache.carbondata.core.writer.CarbonDataChunkWriter;
 import org.apache.carbondata.core.writer.CarbonFooterWriter;
 import org.apache.carbondata.core.writer.CarbonIndexFileWriter;
 import org.apache.carbondata.format.BlockIndex;
+import org.apache.carbondata.format.BlockletInfo;
+import org.apache.carbondata.format.DataChunk;
 import org.apache.carbondata.format.FileFooter;
 import org.apache.carbondata.format.IndexHeader;
 import org.apache.carbondata.processing.mdkeygen.file.FileData;
@@ -356,13 +359,29 @@ public abstract class AbstractFactDataWriter<T> implements CarbonFactDataWriter<
   protected void writeBlockletInfoToFile(List<BlockletInfoColumnar> infoList, FileChannel channel,
       String filePath) throws CarbonDataWriterException {
     try {
-      long currentPosition = channel.size();
       CarbonFooterWriter writer = new CarbonFooterWriter(filePath);
+      List<List<DataChunk>> dataChunkList = new ArrayList<List<DataChunk>>();
+      for (int i = 0; i < infoList.size(); i++) {
+        dataChunkList.add(new ArrayList<DataChunk>());
+      }
       FileFooter convertFileMeta = CarbonMetadataUtil
-          .convertFileFooter(infoList, localCardinality.length, localCardinality,
-              thriftColumnSchemaList, segmentProperties);
-      fillBlockIndexInfoDetails(infoList, convertFileMeta.getNum_rows(), filePath, currentPosition);
-      writer.writeFooter(convertFileMeta, currentPosition);
+          .convertFileFooter(infoList, localCardinality, thriftColumnSchemaList, segmentProperties,
+              dataChunkList);
+      List<BlockletInfo> blocklet_info_list = convertFileMeta.getBlocklet_info_list();
+      List<Long> dataChunkOffSetList = new ArrayList<Long>();
+      CarbonDataChunkWriter dataChunkWriter = new CarbonDataChunkWriter();
+      dataChunkWriter.initalizeThriftWriter(filePath);
+      for (int i = 0; i < dataChunkList.size(); i++) {
+        dataChunkOffSetList = new ArrayList<Long>();
+        for (int j = 0; j < dataChunkList.get(i).size(); j++) {
+          dataChunkOffSetList.add(channel.size());
+          dataChunkWriter.writeFooter(dataChunkList.get(i).get(j));
+        }
+        blocklet_info_list.get(i).setColumn_data_chunks_offsets(dataChunkOffSetList);
+      }
+      dataChunkWriter.close();
+      fillBlockIndexInfoDetails(infoList, convertFileMeta.getNum_rows(), filePath, channel.size());
+      writer.writeFooter(convertFileMeta, channel.size());
     } catch (IOException e) {
       throw new CarbonDataWriterException("Problem while writing the carbon file: ", e);
     }
@@ -435,62 +454,6 @@ public abstract class AbstractFactDataWriter<T> implements CarbonFactDataWriter<
       }
     }
     return columnSchemaList;
-  }
-
-  /**
-   * This method will be used to get the blocklet metadata
-   *
-   * @return BlockletInfo - blocklet metadata
-   */
-  protected BlockletInfoColumnar getBlockletInfo(NodeHolder nodeHolder, long offset) {
-    // create the info object for leaf entry
-    BlockletInfoColumnar infoObj = new BlockletInfoColumnar();
-    // add total entry count
-    infoObj.setNumberOfKeys(nodeHolder.getEntryCount());
-
-    // add the key array length
-    infoObj.setKeyLengths(nodeHolder.getKeyLengths());
-    //add column min max data
-    infoObj.setColumnMaxData(nodeHolder.getColumnMaxData());
-    infoObj.setColumnMinData(nodeHolder.getColumnMinData());
-    infoObj.setMeasureNullValueIndex(nodeHolder.getMeasureNullValueIndex());
-    long[] keyOffSets = new long[nodeHolder.getKeyLengths().length];
-
-    for (int i = 0; i < keyOffSets.length; i++) {
-      keyOffSets[i] = offset;
-      offset += nodeHolder.getKeyLengths()[i];
-    }
-    // add key offset
-    infoObj.setKeyOffSets(keyOffSets);
-
-    // add measure length
-    infoObj.setMeasureLength(nodeHolder.getMeasureLenght());
-
-    long[] msrOffset = new long[this.measureCount];
-
-    for (int i = 0; i < this.measureCount; i++) {
-      msrOffset[i] = offset;
-      // now increment the offset by adding measure length to get the next
-      // measure offset;
-      offset += nodeHolder.getMeasureLenght()[i];
-    }
-    // add measure offset
-    infoObj.setMeasureOffset(msrOffset);
-    infoObj.setIsSortedKeyColumn(nodeHolder.getIsSortedKeyBlock());
-    infoObj.setKeyBlockIndexLength(nodeHolder.getKeyBlockIndexLength());
-    long[] keyBlockIndexOffsets = new long[nodeHolder.getKeyBlockIndexLength().length];
-    for (int i = 0; i < keyBlockIndexOffsets.length; i++) {
-      keyBlockIndexOffsets[i] = offset;
-      offset += nodeHolder.getKeyBlockIndexLength()[i];
-    }
-    infoObj.setKeyBlockIndexOffSets(keyBlockIndexOffsets);
-    // set startkey
-    infoObj.setStartKey(nodeHolder.getStartKey());
-    // set end key
-    infoObj.setEndKey(nodeHolder.getEndKey());
-    infoObj.setCompressionModel(nodeHolder.getCompressionModel());
-    // return leaf metadata
-    return infoObj;
   }
 
   /**
@@ -656,6 +619,8 @@ public abstract class AbstractFactDataWriter<T> implements CarbonFactDataWriter<
     blockletInfoList.add(blockletInfo);
     // calculate the current size of the file
   }
+
+  protected abstract BlockletInfoColumnar getBlockletInfo(NodeHolder nodeHolder, long offset);
 
   protected abstract long writeDataToFile(NodeHolder nodeHolder, FileChannel channel)
       throws CarbonDataWriterException;

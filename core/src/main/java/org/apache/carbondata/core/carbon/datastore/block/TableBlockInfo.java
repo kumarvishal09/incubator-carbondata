@@ -106,6 +106,13 @@ public class TableBlockInfo extends Distributable
   }
 
   /**
+   * @return the blockOffset
+   */
+  public void setBlockOffset(long blockOffset) {
+    this.blockOffset = blockOffset;
+  }
+
+  /**
    * @return the segmentId
    */
   public String getSegmentId() {

@@ -27,8 +27,6 @@ import org.apache.carbondata.core.carbon.datastore.chunk.reader.dimension.Compre
 import org.apache.carbondata.core.carbon.datastore.chunk.reader.measure.CompressedMeasureChunkFileBasedReader;
 import org.apache.carbondata.core.carbon.metadata.blocklet.index.BlockletMinMaxIndex;
 import org.apache.carbondata.core.datastorage.store.FileHolder;
-import org.apache.carbondata.core.datastorage.store.compression.ValueCompressionModel;
-import org.apache.carbondata.core.util.CarbonUtil;
 
 /**
  * Leaf node class of a Blocklet btree
@@ -57,29 +55,27 @@ public class BlockletBTreeLeafNode extends AbstractBTreeLeafNode {
   public BlockletBTreeLeafNode(BTreeBuilderInfo builderInfos, int leafIndex, long nodeNumber) {
     // get a lead node min max
     BlockletMinMaxIndex minMaxIndex =
-        builderInfos.getFooterList().get(0).getBlockletList().get(leafIndex)
-            .getBlockletIndex().getMinMaxIndex();
+        builderInfos.getFooterList().get(0).getBlockletList().get(leafIndex).getBlockletIndex()
+            .getMinMaxIndex();
     // max key of the columns
     maxKeyOfColumns = minMaxIndex.getMaxValues();
     // min keys of the columns
     minKeyOfColumns = minMaxIndex.getMinValues();
     // number of keys present in the leaf
-    numberOfKeys = builderInfos.getFooterList().get(0).getBlockletList().get(leafIndex)
-        .getNumberOfRows();
+    numberOfKeys =
+        builderInfos.getFooterList().get(0).getBlockletList().get(leafIndex).getNumberOfRows();
+
     // create a instance of dimension chunk
     dimensionChunksReader = new CompressedDimensionChunkFileBasedReader(
         builderInfos.getFooterList().get(0).getBlockletList().get(leafIndex)
-            .getDimensionColumnChunk(), builderInfos.getDimensionColumnValueSize(),
+            .getDimensionDataChunkOffsets(), builderInfos.getDimensionColumnValueSize(),
         builderInfos.getFooterList().get(0).getBlockInfo().getTableBlockInfo().getFilePath());
-    // get the value compression model which was used to compress the measure values
-    ValueCompressionModel valueCompressionModel = CarbonUtil.getValueCompressionModel(
-        builderInfos.getFooterList().get(0).getBlockletList().get(leafIndex)
-            .getMeasureColumnChunk());
+
     // create a instance of measure column chunk reader
     measureColumnChunkReader = new CompressedMeasureChunkFileBasedReader(
         builderInfos.getFooterList().get(0).getBlockletList().get(leafIndex)
-            .getMeasureColumnChunk(), valueCompressionModel,
-            builderInfos.getFooterList().get(0).getBlockInfo().getTableBlockInfo().getFilePath());
+            .getMeasureDataChunkOffsets(),
+        builderInfos.getFooterList().get(0).getBlockInfo().getTableBlockInfo().getFilePath());
     this.nodeNumber = nodeNumber;
   }
 

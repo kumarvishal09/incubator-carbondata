@@ -26,6 +26,7 @@ import java.util.BitSet;
 import java.util.List;
 import java.util.UUID;
 
+import junit.framework.TestCase;
 import org.apache.carbondata.core.carbon.datastore.block.SegmentProperties;
 import org.apache.carbondata.core.carbon.metadata.datatype.DataType;
 import org.apache.carbondata.core.carbon.metadata.encoder.Encoding;
@@ -37,9 +38,8 @@ import org.apache.carbondata.core.metadata.BlockletInfoColumnar;
 import org.apache.carbondata.core.reader.CarbonFooterReader;
 import org.apache.carbondata.core.util.CarbonMetadataUtil;
 import org.apache.carbondata.core.util.CarbonUtil;
-
-import junit.framework.TestCase;
 import org.apache.carbondata.format.ColumnSchema;
+import org.apache.carbondata.format.DataChunk;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
@@ -48,9 +48,41 @@ import org.junit.Test;
  * This class will test the functionality writing and
  * reading a dictionary and its corresponding metadata file
  */
-public class CarbonFooterWriterTest extends TestCase{
+public class CarbonFooterWriterTest extends TestCase {
 
   private String filePath;
+
+  public static ColumnSchema getDimensionColumn(String columnName) {
+    ColumnSchema dimColumn = new ColumnSchema();
+    dimColumn.setColumnar(true);
+    dimColumn.setColumn_name(columnName);
+    dimColumn.setColumn_id(UUID.randomUUID().toString());
+    dimColumn.setData_type(org.apache.carbondata.format.DataType.STRING);
+    dimColumn.setDimension(true);
+    List<org.apache.carbondata.format.Encoding> encodeList =
+        new ArrayList<>(CarbonCommonConstants.DEFAULT_COLLECTION_SIZE);
+    encodeList.add(org.apache.carbondata.format.Encoding.DICTIONARY);
+    dimColumn.setEncoders(encodeList);
+    dimColumn.setNum_child(0);
+    return dimColumn;
+  }
+
+  public static org.apache.carbondata.core.carbon.metadata.schema.table.column.ColumnSchema getWrapperDimensionColumn(
+      String columnName) {
+    org.apache.carbondata.core.carbon.metadata.schema.table.column.ColumnSchema dimColumn =
+        new org.apache.carbondata.core.carbon.metadata.schema.table.column.ColumnSchema();
+    dimColumn.setColumnar(true);
+    dimColumn.setColumnName(columnName);
+    dimColumn.setColumnUniqueId(UUID.randomUUID().toString());
+    dimColumn.setDataType(DataType.STRING);
+    dimColumn.setDimensionColumn(true);
+    List<Encoding> encodeList = new ArrayList<>(CarbonCommonConstants.DEFAULT_COLLECTION_SIZE);
+    encodeList.add(Encoding.DICTIONARY);
+    dimColumn.setEncodingList(encodeList);
+    dimColumn.setNumberOfChild(0);
+    ;
+    return dimColumn;
+  }
 
   @Before public void setUp() throws Exception {
     filePath = "testMeta.fact";
@@ -73,58 +105,27 @@ public class CarbonFooterWriterTest extends TestCase{
     List<BlockletInfoColumnar> infoColumnars = getBlockletInfoColumnars();
 
     int[] cardinalities = new int[] { 2, 4, 5, 7, 9, 10 };
-    List<ColumnSchema> columnSchema = Arrays.asList(new ColumnSchema[]{getDimensionColumn("IMEI1"),
-						getDimensionColumn("IMEI2"),
-						getDimensionColumn("IMEI3"),
-						getDimensionColumn("IMEI4"),
-						getDimensionColumn("IMEI5"),
-						getDimensionColumn("IMEI6")});
-    List<org.apache.carbondata.core.carbon.metadata.schema.table.column.ColumnSchema> wrapperColumnSchema = Arrays.asList(new org.apache.carbondata.core.carbon.metadata.schema.table.column.ColumnSchema[]{getWrapperDimensionColumn("IMEI1"),
-    	getWrapperDimensionColumn("IMEI2"),
-    	getWrapperDimensionColumn("IMEI3"),
-    	getWrapperDimensionColumn("IMEI4"),
-    	getWrapperDimensionColumn("IMEI5"),
-    	getWrapperDimensionColumn("IMEI6")});
+    List<ColumnSchema> columnSchema = Arrays.asList(
+        new ColumnSchema[] { getDimensionColumn("IMEI1"), getDimensionColumn("IMEI2"),
+            getDimensionColumn("IMEI3"), getDimensionColumn("IMEI4"), getDimensionColumn("IMEI5"),
+            getDimensionColumn("IMEI6") });
+    List<org.apache.carbondata.core.carbon.metadata.schema.table.column.ColumnSchema>
+        wrapperColumnSchema = Arrays.asList(
+        new org.apache.carbondata.core.carbon.metadata.schema.table.column.ColumnSchema[] {
+            getWrapperDimensionColumn("IMEI1"), getWrapperDimensionColumn("IMEI2"),
+            getWrapperDimensionColumn("IMEI3"), getWrapperDimensionColumn("IMEI4"),
+            getWrapperDimensionColumn("IMEI5"), getWrapperDimensionColumn("IMEI6") });
     int[] colCardinality = CarbonUtil.getFormattedCardinality(cardinalities, wrapperColumnSchema);
-    SegmentProperties segmentProperties = new SegmentProperties(wrapperColumnSchema, colCardinality);
-		writer.writeFooter(CarbonMetadataUtil.convertFileFooter(
-				infoColumnars,
-				6,
-				cardinalities,columnSchema, segmentProperties
-				), 0);
+    List<List<DataChunk>> dataChunkList = new ArrayList<>();
+    SegmentProperties segmentProperties =
+        new SegmentProperties(wrapperColumnSchema, colCardinality);
+    writer.writeFooter(CarbonMetadataUtil
+        .convertFileFooter(infoColumnars, cardinalities, columnSchema, segmentProperties,
+            dataChunkList), 0);
 
     CarbonFooterReader metaDataReader = new CarbonFooterReader(filePath, 0);
     assertTrue(metaDataReader.readFooter() != null);
   }
-  
-  public static ColumnSchema getDimensionColumn(String columnName) {
-	    ColumnSchema dimColumn = new ColumnSchema();
-	    dimColumn.setColumnar(true);
-	    dimColumn.setColumn_name(columnName);
-	    dimColumn.setColumn_id(UUID.randomUUID().toString());
-	    dimColumn.setData_type(org.apache.carbondata.format.DataType.STRING);
-	    dimColumn.setDimension(true);
-	    List<org.apache.carbondata.format.Encoding> encodeList =
-		        new ArrayList<>(CarbonCommonConstants.DEFAULT_COLLECTION_SIZE);
-	    encodeList.add(org.apache.carbondata.format.Encoding.DICTIONARY);
-	    dimColumn.setEncoders(encodeList);
-	    dimColumn.setNum_child(0);
-	    return dimColumn;
-	  }
-  public static org.apache.carbondata.core.carbon.metadata.schema.table.column.ColumnSchema getWrapperDimensionColumn(String columnName) {
-   org.apache.carbondata.core.carbon.metadata.schema.table.column.ColumnSchema dimColumn = new org.apache.carbondata.core.carbon.metadata.schema.table.column.ColumnSchema();
-   dimColumn.setColumnar(true);
-   dimColumn.setColumnName(columnName);
-   dimColumn.setColumnUniqueId(UUID.randomUUID().toString());
-   dimColumn.setDataType(DataType.STRING);
-   dimColumn.setDimensionColumn(true);
-   List<Encoding> encodeList =
-        new ArrayList<>(CarbonCommonConstants.DEFAULT_COLLECTION_SIZE);
-   encodeList.add(Encoding.DICTIONARY);
-   dimColumn.setEncodingList(encodeList);
-   dimColumn.setNumberOfChild(0);;
-   return dimColumn;
- }
 
   /**
    * test writing fact metadata.
@@ -134,24 +135,23 @@ public class CarbonFooterWriterTest extends TestCase{
     createFile();
     CarbonFooterWriter writer = new CarbonFooterWriter(filePath);
     List<BlockletInfoColumnar> infoColumnars = getBlockletInfoColumnars();
-    int[] cardinalities = new int[] { 2, 4, 5, 7, 9, 10};
-    List<ColumnSchema> columnSchema = Arrays.asList(new ColumnSchema[]{getDimensionColumn("IMEI1"),
-						getDimensionColumn("IMEI2"),
-						getDimensionColumn("IMEI3"),
-						getDimensionColumn("IMEI4"),
-						getDimensionColumn("IMEI5"),
-						getDimensionColumn("IMEI6")});
-    List<org.apache.carbondata.core.carbon.metadata.schema.table.column.ColumnSchema> wrapperColumnSchema = Arrays.asList(new org.apache.carbondata.core.carbon.metadata.schema.table.column.ColumnSchema[]{getWrapperDimensionColumn("IMEI1"),
-    	getWrapperDimensionColumn("IMEI2"),
-    	getWrapperDimensionColumn("IMEI3"),
-    	getWrapperDimensionColumn("IMEI4"),
-    	getWrapperDimensionColumn("IMEI5"),
-    	getWrapperDimensionColumn("IMEI6")});
+    int[] cardinalities = new int[] { 2, 4, 5, 7, 9, 10 };
+    List<ColumnSchema> columnSchema = Arrays.asList(
+        new ColumnSchema[] { getDimensionColumn("IMEI1"), getDimensionColumn("IMEI2"),
+            getDimensionColumn("IMEI3"), getDimensionColumn("IMEI4"), getDimensionColumn("IMEI5"),
+            getDimensionColumn("IMEI6") });
+    List<org.apache.carbondata.core.carbon.metadata.schema.table.column.ColumnSchema>
+        wrapperColumnSchema = Arrays.asList(
+        new org.apache.carbondata.core.carbon.metadata.schema.table.column.ColumnSchema[] {
+            getWrapperDimensionColumn("IMEI1"), getWrapperDimensionColumn("IMEI2"),
+            getWrapperDimensionColumn("IMEI3"), getWrapperDimensionColumn("IMEI4"),
+            getWrapperDimensionColumn("IMEI5"), getWrapperDimensionColumn("IMEI6") });
     int[] colCardinality = CarbonUtil.getFormattedCardinality(cardinalities, wrapperColumnSchema);
     SegmentProperties segmentProperties = new SegmentProperties(wrapperColumnSchema, cardinalities);
+    List<List<DataChunk>> dataChunkList = new ArrayList<>();
     writer.writeFooter(CarbonMetadataUtil
-        .convertFileFooter(infoColumnars, 6, colCardinality,
-        		columnSchema,segmentProperties), 0);
+        .convertFileFooter(infoColumnars, colCardinality, columnSchema, segmentProperties,
+            dataChunkList), 0);
 
     CarbonFooterReader metaDataReader = new CarbonFooterReader(filePath, 0);
     List<BlockletInfoColumnar> nodeInfoColumnars =
@@ -181,7 +181,7 @@ public class CarbonFooterWriterTest extends TestCase{
     infoColumnar.setMeasureOffset(new long[] { 33, 99 });
     infoColumnar.setAggKeyBlock(new boolean[] { true, true, true, true });
     infoColumnar.setColGrpBlocks(new boolean[] { false, false, false, false });
-    infoColumnar.setMeasureNullValueIndex(new BitSet[] {new BitSet(),new BitSet()});
+    infoColumnar.setMeasureNullValueIndex(new BitSet[] { new BitSet(), new BitSet() });
     ValueCompressionModel compressionModel = new ValueCompressionModel();
     compressionModel.setMaxValue(new Object[] { 44d, 55d });
     compressionModel.setMinValue(new Object[] { 0d, 0d });

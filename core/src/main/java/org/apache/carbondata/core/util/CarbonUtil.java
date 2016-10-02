@@ -49,7 +49,6 @@ import org.apache.carbondata.core.carbon.AbsoluteTableIdentifier;
 import org.apache.carbondata.core.carbon.datastore.block.TableBlockInfo;
 import org.apache.carbondata.core.carbon.datastore.chunk.impl.FixedLengthDimensionDataChunk;
 import org.apache.carbondata.core.carbon.metadata.blocklet.DataFileFooter;
-import org.apache.carbondata.core.carbon.metadata.blocklet.datachunk.DataChunk;
 import org.apache.carbondata.core.carbon.metadata.datatype.DataType;
 import org.apache.carbondata.core.carbon.metadata.encoder.Encoding;
 import org.apache.carbondata.core.carbon.metadata.schema.table.column.CarbonDimension;
@@ -652,6 +651,19 @@ public final class CarbonUtil {
   }
 
   /**
+   * Convert int array to Integer list
+   *
+   * @param array
+   * @return List<Integer>
+   */
+  public static int[] convertToPremitiveIntArray(List<Integer> list) {
+    int[] array = new int[list.size()];
+    for (int i = 0; i < list.size(); i++) {
+      array[i] = list.get(i);
+    }
+    return array;
+  }
+  /**
    * Read level metadata file and return cardinality
    *
    * @param levelPath
@@ -936,29 +948,25 @@ public final class CarbonUtil {
    * @return value compression model
    */
   public static ValueCompressionModel getValueCompressionModel(
-      List<DataChunk> measureDataChunkList) {
-    Object[] maxValue = new Object[measureDataChunkList.size()];
-    Object[] minValue = new Object[measureDataChunkList.size()];
-    Object[] uniqueValue = new Object[measureDataChunkList.size()];
-    int[] decimal = new int[measureDataChunkList.size()];
-    char[] type = new char[measureDataChunkList.size()];
-    byte[] dataTypeSelected = new byte[measureDataChunkList.size()];
+      List<ValueEncoderMeta> encodeMetaList) {
+    Object[] maxValue = new Object[encodeMetaList.size()];
+    Object[] minValue = new Object[encodeMetaList.size()];
+    Object[] uniqueValue = new Object[encodeMetaList.size()];
+    int[] decimal = new int[encodeMetaList.size()];
+    char[] type = new char[encodeMetaList.size()];
+    byte[] dataTypeSelected = new byte[encodeMetaList.size()];
 
     /**
      * to fill the meta data required for value compression model
      */
     for (int i = 0; i < dataTypeSelected.length; i++) {
-      int indexOf = measureDataChunkList.get(i).getEncodingList().indexOf(Encoding.DELTA);
-      if (indexOf > -1) {
-        ValueEncoderMeta valueEncoderMeta =
-            measureDataChunkList.get(i).getValueEncoderMeta().get(indexOf);
-        maxValue[i] = valueEncoderMeta.getMaxValue();
-        minValue[i] = valueEncoderMeta.getMinValue();
-        uniqueValue[i] = valueEncoderMeta.getUniqueValue();
-        decimal[i] = valueEncoderMeta.getDecimal();
-        type[i] = valueEncoderMeta.getType();
-        dataTypeSelected[i] = valueEncoderMeta.getDataTypeSelected();
-      }
+      ValueEncoderMeta valueEncoderMeta = encodeMetaList.get(i);
+      maxValue[i] = valueEncoderMeta.getMaxValue();
+      minValue[i] = valueEncoderMeta.getMinValue();
+      uniqueValue[i] = valueEncoderMeta.getUniqueValue();
+      decimal[i] = valueEncoderMeta.getDecimal();
+      type[i] = valueEncoderMeta.getType();
+      dataTypeSelected[i] = valueEncoderMeta.getDataTypeSelected();
     }
     MeasureMetaDataModel measureMetadataModel =
         new MeasureMetaDataModel(minValue, maxValue, decimal, dataTypeSelected.length, uniqueValue,
@@ -976,7 +984,6 @@ public final class CarbonUtil {
   public static boolean hasEncoding(List<Encoding> encodings, Encoding encoding) {
     return encodings.contains(encoding);
   }
-
   /**
    * below method is to check whether data type is present in the data type array
    *
@@ -1040,16 +1047,17 @@ public final class CarbonUtil {
   /**
    * Below method will be used to read the data file matadata
    *
-   * @param filePath file path
-   * @param blockOffset   offset in the file
+   * @param filePath    file path
+   * @param blockOffset offset in the file
    * @return Data file metadata instance
    * @throws CarbonUtilException
    */
-  public static DataFileFooter readMetadatFile(String filePath, long blockOffset, long blockLength)
-      throws CarbonUtilException {
+  public static DataFileFooter readMetadatFile(String filePath, long blockOffset, long blockLength,
+      List<ColumnSchema> columnSchema) throws CarbonUtilException {
     DataFileFooterConverter fileFooterConverter = new DataFileFooterConverter();
     try {
-      return fileFooterConverter.readDataFileFooter(filePath, blockOffset, blockLength);
+      return fileFooterConverter
+          .readDataFileFooter(filePath, blockOffset, blockLength, columnSchema);
     } catch (IOException e) {
       throw new CarbonUtilException("Problem while reading the file metadata", e);
     }

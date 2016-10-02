@@ -22,7 +22,6 @@ package org.apache.carbondata.core.carbon.metadata.blocklet;
 import java.io.Serializable;
 import java.util.List;
 
-import org.apache.carbondata.core.carbon.metadata.blocklet.datachunk.DataChunk;
 import org.apache.carbondata.core.carbon.metadata.blocklet.index.BlockletIndex;
 
 /**
@@ -41,19 +40,13 @@ public class BlockletInfo implements Serializable {
   private int numberOfRows;
 
   /**
-   * Information about dimension chunk of all dimensions in this blocklet
-   */
-  private List<DataChunk> dimensionColumnChunk;
-
-  /**
-   * Information about measure chunk of all measures in this blocklet
-   */
-  private List<DataChunk> measureColumnChunk;
-
-  /**
    * to store the index like min max and start and end key of each column of the blocklet
    */
   private BlockletIndex blockletIndex;
+
+  private List<Long> dimensionDataChunkOffsets;
+
+  private List<Long> measureDataChunkOffsets;
 
   /**
    * @return the numberOfRows
@@ -70,34 +63,6 @@ public class BlockletInfo implements Serializable {
   }
 
   /**
-   * @return the dimensionColumnChunk
-   */
-  public List<DataChunk> getDimensionColumnChunk() {
-    return dimensionColumnChunk;
-  }
-
-  /**
-   * @param dimensionColumnChunk the dimensionColumnChunk to set
-   */
-  public void setDimensionColumnChunk(List<DataChunk> dimensionColumnChunk) {
-    this.dimensionColumnChunk = dimensionColumnChunk;
-  }
-
-  /**
-   * @return the measureColumnChunk
-   */
-  public List<DataChunk> getMeasureColumnChunk() {
-    return measureColumnChunk;
-  }
-
-  /**
-   * @param measureColumnChunk the measureColumnChunk to set
-   */
-  public void setMeasureColumnChunk(List<DataChunk> measureColumnChunk) {
-    this.measureColumnChunk = measureColumnChunk;
-  }
-
-  /**
    * @return the blockletIndex
    */
   public BlockletIndex getBlockletIndex() {
@@ -111,4 +76,19 @@ public class BlockletInfo implements Serializable {
     this.blockletIndex = blockletIndex;
   }
 
+  public List<Long> getDimensionDataChunkOffsets() {
+    return dimensionDataChunkOffsets;
+  }
+
+  public void setDimensionDataChunkOffsets(List<Long> dimensionDataChunkOffsets) {
+    this.dimensionDataChunkOffsets = dimensionDataChunkOffsets;
+  }
+
+  public List<Long> getMeasureDataChunkOffsets() {
+    return measureDataChunkOffsets;
+  }
+
+  public void setMeasureDataChunkOffsets(List<Long> measureDataChunkOffsets) {
+    this.measureDataChunkOffsets = measureDataChunkOffsets;
+  }
 }

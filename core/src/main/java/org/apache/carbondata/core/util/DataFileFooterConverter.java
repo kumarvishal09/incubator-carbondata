@@ -21,10 +21,8 @@ package org.apache.carbondata.core.util;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.ObjectInputStream;
-import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.BitSet;
-import java.util.Iterator;
 import java.util.List;
 
 import org.apache.carbondata.common.logging.LogService;
@@ -46,8 +44,6 @@ import org.apache.carbondata.core.carbon.metadata.datatype.DataType;
 import org.apache.carbondata.core.carbon.metadata.encoder.Encoding;
 import org.apache.carbondata.core.carbon.metadata.schema.table.column.ColumnSchema;
 import org.apache.carbondata.core.constants.CarbonCommonConstants;
-import org.apache.carbondata.core.datastorage.store.FileHolder;
-import org.apache.carbondata.core.datastorage.store.impl.FileFactory;
 import org.apache.carbondata.core.metadata.ValueEncoderMeta;
 import org.apache.carbondata.core.reader.CarbonFooterReader;
 import org.apache.carbondata.core.reader.CarbonIndexFileReader;
@@ -97,6 +93,7 @@ public class DataFileFooterConverter {
         blockletIndex = getBlockletIndex(readBlockIndexInfo.getBlock_index());
         dataFileFooter = new DataFileFooter();
         TableBlockInfo tableBlockInfo = tableBlockInfoList.get(counter++);
+        tableBlockInfo.setBlockOffset(readBlockIndexInfo.offset);
         int blockletSize = getBlockletSize(readBlockIndexInfo);
         tableBlockInfo.getBlockletInfos().setNoOfBlockLets(blockletSize);
         dataFileFooter.setBlockletIndex(blockletIndex);
@@ -114,6 +111,7 @@ public class DataFileFooterConverter {
 
   /**
    * the methods returns the number of blocklets in a block
+   *
    * @param readBlockIndexInfo
    * @return
    */
@@ -135,50 +133,36 @@ public class DataFileFooterConverter {
   /**
    * Below method will be used to convert thrift file meta to wrapper file meta
    */
-  public DataFileFooter readDataFileFooter(String filePath, long blockOffset, long blockLength)
-      throws IOException {
+  public DataFileFooter readDataFileFooter(String filePath, long blockOffset, long blockLength,
+      List<ColumnSchema> columnSchemaList) throws IOException {
     DataFileFooter dataFileFooter = new DataFileFooter();
-    FileHolder fileReader = null;
-    try {
-      long completeBlockLength = blockOffset + blockLength;
-      long footerPointer = completeBlockLength - 8;
-      fileReader = FileFactory.getFileHolder(FileFactory.getFileType(filePath));
-      long actualFooterOffset = fileReader.readLong(filePath, footerPointer);
-      CarbonFooterReader reader = new CarbonFooterReader(filePath, actualFooterOffset);
-      FileFooter footer = reader.readFooter();
-      dataFileFooter.setVersionId(footer.getVersion());
-      dataFileFooter.setNumberOfRows(footer.getNum_rows());
-      dataFileFooter.setSegmentInfo(getSegmentInfo(footer.getSegment_info()));
-      List<ColumnSchema> columnSchemaList = new ArrayList<ColumnSchema>();
-      List<org.apache.carbondata.format.ColumnSchema> table_columns = footer.getTable_columns();
-      for (int i = 0; i < table_columns.size(); i++) {
-        columnSchemaList.add(thriftColumnSchmeaToWrapperColumnSchema(table_columns.get(i)));
-      }
-      dataFileFooter.setColumnInTable(columnSchemaList);
-
-      List<org.apache.carbondata.format.BlockletIndex> leaf_node_indices_Thrift =
-          footer.getBlocklet_index_list();
-      List<BlockletIndex> blockletIndexList = new ArrayList<BlockletIndex>();
-      for (int i = 0; i < leaf_node_indices_Thrift.size(); i++) {
-        BlockletIndex blockletIndex = getBlockletIndex(leaf_node_indices_Thrift.get(i));
-        blockletIndexList.add(blockletIndex);
-      }
-
-      List<org.apache.carbondata.format.BlockletInfo> leaf_node_infos_Thrift =
-          footer.getBlocklet_info_list();
-      List<BlockletInfo> blockletInfoList = new ArrayList<BlockletInfo>();
-      for (int i = 0; i < leaf_node_infos_Thrift.size(); i++) {
-        BlockletInfo blockletInfo = getBlockletInfo(leaf_node_infos_Thrift.get(i));
-        blockletInfo.setBlockletIndex(blockletIndexList.get(i));
-        blockletInfoList.add(blockletInfo);
-      }
-      dataFileFooter.setBlockletList(blockletInfoList);
-      dataFileFooter.setBlockletIndex(getBlockletIndexForDataFileFooter(blockletIndexList));
-    } finally {
-      if (null != fileReader) {
-        fileReader.finish();
-      }
+    CarbonFooterReader reader = new CarbonFooterReader(filePath, blockOffset);
+    FileFooter footer = reader.readFooter();
+    dataFileFooter.setVersionId(footer.getVersion());
+    dataFileFooter.setNumberOfRows(footer.getNum_rows());
+    SegmentInfo segmentInfo = new SegmentInfo();
+    segmentInfo.setColumnCardinality(
+        CarbonUtil.convertToPremitiveIntArray(footer.getColumn_cardinalities()));
+    segmentInfo.setNumberOfColumns(footer.getColumn_cardinalities().size());
+    dataFileFooter.setSegmentInfo(segmentInfo);
+    dataFileFooter.setColumnInTable(columnSchemaList);
+    List<org.apache.carbondata.format.BlockletIndex> leaf_node_indices_Thrift =
+        footer.getBlocklet_index_list();
+    List<BlockletIndex> blockletIndexList = new ArrayList<BlockletIndex>();
+    for (int i = 0; i < leaf_node_indices_Thrift.size(); i++) {
+      BlockletIndex blockletIndex = getBlockletIndex(leaf_node_indices_Thrift.get(i));
+      blockletIndexList.add(blockletIndex);
     }
+
+    List<org.apache.carbondata.format.BlockletInfo> leaf_node_infos_Thrift =
+        footer.getBlocklet_info_list();
+    List<BlockletInfo> blockletInfoList = new ArrayList<BlockletInfo>();
+    for (int i = 0; i < leaf_node_infos_Thrift.size(); i++) {
+      BlockletInfo blockletInfo = getBlockletInfo(leaf_node_infos_Thrift.get(i), columnSchemaList);
+      blockletInfo.setBlockletIndex(blockletIndexList.get(i));
+      blockletInfoList.add(blockletInfo);
+    }
+    dataFileFooter.setBlockletList(blockletInfoList);
     return dataFileFooter;
   }
 
@@ -249,28 +233,27 @@ public class DataFileFooterConverter {
    * @param blockletInfoThrift blocklet info of the thrift
    * @return blocklet info wrapper
    */
-  private BlockletInfo getBlockletInfo(
-      org.apache.carbondata.format.BlockletInfo blockletInfoThrift) {
+  private BlockletInfo getBlockletInfo(org.apache.carbondata.format.BlockletInfo blockletInfoThrift,
+      List<ColumnSchema> columnSchema) {
     BlockletInfo blockletInfo = new BlockletInfo();
-    List<DataChunk> dimensionColumnChunk = new ArrayList<DataChunk>();
-    List<DataChunk> measureChunk = new ArrayList<DataChunk>();
-    Iterator<org.apache.carbondata.format.DataChunk> column_data_chunksIterator =
-        blockletInfoThrift.getColumn_data_chunksIterator();
-    if (null != column_data_chunksIterator) {
-      while (column_data_chunksIterator.hasNext()) {
-        org.apache.carbondata.format.DataChunk next = column_data_chunksIterator.next();
-        if (next.isRowMajor()) {
-          dimensionColumnChunk.add(getDataChunk(next, false));
-        } else if (next.getEncoders().contains(org.apache.carbondata.format.Encoding.DELTA)) {
-          measureChunk.add(getDataChunk(next, true));
-        } else {
-          dimensionColumnChunk.add(getDataChunk(next, false));
-        }
+    blockletInfo.setNumberOfRows(blockletInfoThrift.getNum_rows());
+    List<Long> data_ckunkOffsets = blockletInfoThrift.column_data_chunks_offsets;
+    int measureStartIndex = -1;
+    for (int i = columnSchema.size() - 1; i >= 0; i--) {
+      if (!columnSchema.get(i).isDimensionColumn()) {
+        measureStartIndex = i;
+      } else {
+        break;
       }
     }
-    blockletInfo.setDimensionColumnChunk(dimensionColumnChunk);
-    blockletInfo.setMeasureColumnChunk(measureChunk);
-    blockletInfo.setNumberOfRows(blockletInfoThrift.getNum_rows());
+    if (measureStartIndex == -1) {
+      measureStartIndex = columnSchema.size();
+    }
+    List<Long> dimensionDataChunkOffsets = data_ckunkOffsets.subList(0, measureStartIndex);
+    List<Long> measureDataChunkOffsets =
+        data_ckunkOffsets.subList(measureStartIndex, columnSchema.size());
+    blockletInfo.setDimensionDataChunkOffsets(dimensionDataChunkOffsets);
+    blockletInfo.setMeasureDataChunkOffsets(measureDataChunkOffsets);
     return blockletInfo;
   }
 
@@ -444,7 +427,6 @@ public class DataFileFooterConverter {
   private DataChunk getDataChunk(org.apache.carbondata.format.DataChunk datachunkThrift,
       boolean isPresenceMetaPresent) {
     DataChunk dataChunk = new DataChunk();
-    dataChunk.setColumnUniqueIdList(datachunkThrift.getColumn_ids());
     dataChunk.setDataPageLength(datachunkThrift.getData_page_length());
     dataChunk.setDataPageOffset(datachunkThrift.getData_page_offset());
     if (isPresenceMetaPresent) {
@@ -462,15 +444,6 @@ public class DataFileFooterConverter {
       encodingList.add(fromExternalToWrapperEncoding(datachunkThrift.getEncoders().get(i)));
     }
     dataChunk.setEncoderList(encodingList);
-    if (encodingList.contains(Encoding.DELTA)) {
-      List<ByteBuffer> thriftEncoderMeta = datachunkThrift.getEncoder_meta();
-      List<ValueEncoderMeta> encodeMetaList =
-          new ArrayList<ValueEncoderMeta>(thriftEncoderMeta.size());
-      for (int i = 0; i < thriftEncoderMeta.size(); i++) {
-        encodeMetaList.add(deserializeEncoderMeta(thriftEncoderMeta.get(i).array()));
-      }
-      dataChunk.setValueEncoderMeta(encodeMetaList);
-    }
     return dataChunk;
   }
 

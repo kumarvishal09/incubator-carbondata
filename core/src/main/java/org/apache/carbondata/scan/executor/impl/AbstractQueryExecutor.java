@@ -93,6 +93,7 @@ public abstract class AbstractQueryExecutor<E> implements QueryExecutor<E> {
     queryProperties.queryStatisticsRecorder = new QueryStatisticsRecorder(queryModel.getQueryId());
     queryModel.setStatisticsRecorder(queryProperties.queryStatisticsRecorder);
     QueryUtil.resolveQueryModel(queryModel);
+
     QueryStatistic queryStatistic = new QueryStatistic();
     // sort the block info
     // so block will be loaded in sorted order this will be required for
@@ -106,7 +107,9 @@ public abstract class AbstractQueryExecutor<E> implements QueryExecutor<E> {
     try {
       queryProperties.dataBlocks = blockLoaderInstance
           .loadAndGetBlocks(queryModel.getTableBlockInfos(),
-              queryModel.getAbsoluteTableIdentifier());
+              queryModel.getAbsoluteTableIdentifier(), queryModel.getTable().getAllColumnSchema(
+                  queryModel.getAbsoluteTableIdentifier().getCarbonTableIdentifier()
+                      .getTableName()));
     } catch (IndexBuilderException e) {
       throw new QueryExecutionException(e);
     }

@@ -184,19 +184,10 @@ public class CarbonFactDataWriterImplForIntIndexAndAggBlock extends AbstractFact
       System.arraycopy(dataArray[i], 0, writableDataArray, startPosition, dataArray[i].length);
       startPosition += msrLength[i];
     }
-    // current file size;
-    int indexBlockSize = 0;
-    for (int i = 0; i < keyBlockIdxLengths.length; i++) {
-      indexBlockSize += keyBlockIdxLengths[i] + CarbonCommonConstants.INT_SIZE_IN_BYTE;
-    }
-
-    for (int i = 0; i < dataIndexMapLength.length; i++) {
-      indexBlockSize += dataIndexMapLength[i];
-    }
 
     NodeHolder holder = new NodeHolder();
-    holder.setDataArray(writableDataArray);
-    holder.setKeyArray(writableKeyArray);
+    holder.setDataArray(dataArray);
+    holder.setKeyArray(keyBlockData);
     // end key format will be <length of dictionary key><length of no
     // dictionary key><DictionaryKey><No Dictionary key>
     byte[] updatedNoDictionaryEndKey = updateNoDictionaryStartAndEndKey(noDictionaryEndKey);
@@ -242,7 +233,7 @@ public class CarbonFactDataWriterImplForIntIndexAndAggBlock extends AbstractFact
   @Override public void writeBlockletData(NodeHolder holder) throws CarbonDataWriterException {
     int indexBlockSize = 0;
     for (int i = 0; i < holder.getKeyBlockIndexLength().length; i++) {
-      indexBlockSize += holder.getKeyBlockIndexLength()[i] + CarbonCommonConstants.INT_SIZE_IN_BYTE;
+      indexBlockSize += holder.getKeyBlockIndexLength()[i];
     }
 
     for (int i = 0; i < holder.getDataIndexMapLength().length; i++) {
@@ -355,54 +346,62 @@ public class CarbonFactDataWriterImplForIntIndexAndAggBlock extends AbstractFact
    */
   protected long writeDataToFile(NodeHolder nodeHolder, FileChannel channel)
       throws CarbonDataWriterException {
-    // create byte buffer
+    long offset = 0;
+    ByteBuffer buffer = null;
+    boolean[] isSortedKeyBlock = nodeHolder.getIsSortedKeyBlock();
+    int rowIdIndex = 0;
+    int rleIndex = 0;
     byte[][] compressedIndex = nodeHolder.getCompressedIndex();
     byte[][] compressedIndexMap = nodeHolder.getCompressedIndexMap();
     byte[][] compressedDataIndex = nodeHolder.getCompressedDataIndex();
-    int indexBlockSize = 0;
-    int index = 0;
-    for (int i = 0; i < nodeHolder.getKeyBlockIndexLength().length; i++) {
-      indexBlockSize +=
-          nodeHolder.getKeyBlockIndexLength()[index++] + CarbonCommonConstants.INT_SIZE_IN_BYTE;
-    }
-
-    for (int i = 0; i < nodeHolder.getDataIndexMapLength().length; i++) {
-      indexBlockSize += nodeHolder.getDataIndexMapLength()[i];
-    }
-    ByteBuffer byteBuffer = ByteBuffer.allocate(
-        nodeHolder.getKeyArray().length + nodeHolder.getDataArray().length + indexBlockSize);
-    long offset = 0;
     try {
-      // get the current offset
       offset = channel.size();
-      // add key array to byte buffer
-      byteBuffer.put(nodeHolder.getKeyArray());
-      // add measure data array to byte buffer
-      byteBuffer.put(nodeHolder.getDataArray());
-
-      ByteBuffer buffer1 = null;
-      for (int i = 0; i < compressedIndex.length; i++) {
-        buffer1 = ByteBuffer.allocate(nodeHolder.getKeyBlockIndexLength()[i]);
-        buffer1.putInt(compressedIndex[i].length);
-        buffer1.put(compressedIndex[i]);
-        if (compressedIndexMap[i].length > 0) {
-          buffer1.put(compressedIndexMap[i]);
+      for (int i = 0; i < isSortedKeyBlock.length; i++) {
+        if (!isSortedKeyBlock[i] && aggBlocks[i]) {
+          buffer = ByteBuffer.allocate(
+              nodeHolder.getKeyArray()[i].length + nodeHolder.getKeyBlockIndexLength()[rowIdIndex]
+                  + nodeHolder.getDataIndexMapLength()[rleIndex]);
+          buffer.put(nodeHolder.getKeyArray()[i]);
+          buffer.putInt(compressedIndex[rowIdIndex].length);
+          buffer.put(compressedIndex[rowIdIndex]);
+          if (compressedIndexMap[rowIdIndex].length > 0) {
+            buffer.put(compressedIndexMap[rowIdIndex]);
+          }
+          buffer.put(compressedDataIndex[rleIndex]);
+          rowIdIndex++;
+          rleIndex++;
+        } else if (!isSortedKeyBlock[i] && !aggBlocks[i]) {
+          buffer = ByteBuffer.allocate(
+              nodeHolder.getKeyArray()[i].length + nodeHolder.getKeyBlockIndexLength()[rowIdIndex]);
+          buffer.put(nodeHolder.getKeyArray()[i]);
+          buffer.putInt(compressedIndex[rowIdIndex].length);
+          buffer.put(compressedIndex[rowIdIndex]);
+          if (compressedIndexMap[rowIdIndex].length > 0) {
+            buffer.put(compressedIndexMap[rowIdIndex]);
+          }
+          rowIdIndex++;
+        } else if (isSortedKeyBlock[i] && aggBlocks[i]) {
+          buffer = ByteBuffer.allocate(
+              nodeHolder.getKeyArray()[i].length + nodeHolder.getDataIndexMapLength()[rleIndex]);
+          buffer.put(nodeHolder.getKeyArray()[i]);
+          buffer.put(compressedDataIndex[rleIndex]);
+          rleIndex++;
+        } else {
+          buffer = ByteBuffer.allocate(nodeHolder.getKeyArray()[i].length);
+          buffer.put(nodeHolder.getKeyArray()[i]);
         }
-        buffer1.rewind();
-        byteBuffer.put(buffer1.array());
-
+        buffer.flip();
+        channel.write(buffer);
       }
-      for (int i = 0; i < compressedDataIndex.length; i++) {
-        byteBuffer.put(compressedDataIndex[i]);
+      for (int i = 0; i < nodeHolder.getDataArray().length; i++) {
+        buffer = ByteBuffer.allocate(nodeHolder.getDataArray()[i].length);
+        buffer.put(nodeHolder.getDataArray()[i]);
+        buffer.flip();
+        channel.write(buffer);
       }
-      byteBuffer.flip();
-      // write data to file
-      channel.write(byteBuffer);
-    } catch (IOException exception) {
-      throw new CarbonDataWriterException("Problem in writing carbon file: ", exception);
+    } catch (IOException e) {
+      throw new CarbonDataWriterException("Problem in writing carbon file: ", e);
     }
-    // return the offset, this offset will be used while reading the file in
-    // engine side to get from which position to start reading the file
     return offset;
   }
 
@@ -427,10 +426,23 @@ public class CarbonFactDataWriterImplForIntIndexAndAggBlock extends AbstractFact
     info.setColumnMaxData(nodeHolder.getColumnMaxData());
     info.setColumnMinData(nodeHolder.getColumnMinData());
     long[] keyOffSets = new long[nodeHolder.getKeyLengths().length];
-
+    long[] keyBlockIndexOffsets = new long[nodeHolder.getKeyBlockIndexLength().length];
+    long[] dataIndexMapOffsets = new long[nodeHolder.getDataIndexMapLength().length];
+    int rowIdIndex = 0;
+    int rleIndex = 0;
     for (int i = 0; i < keyOffSets.length; i++) {
       keyOffSets[i] = offset;
       offset += nodeHolder.getKeyLengths()[i];
+      if (!nodeHolder.getIsSortedKeyBlock()[i]) {
+        keyBlockIndexOffsets[rowIdIndex] = offset;
+        offset += nodeHolder.getKeyBlockIndexLength()[rowIdIndex];
+        rowIdIndex++;
+      }
+      if (aggBlocks[i]) {
+        dataIndexMapOffsets[rleIndex] = offset;
+        offset += nodeHolder.getDataIndexMapLength()[rleIndex];
+        rleIndex++;
+      }
     }
     // key offset will be 8 bytes from current offset because first 4 bytes
     // will be for number of entry in leaf, then next 4 bytes will be for
@@ -458,17 +470,7 @@ public class CarbonFactDataWriterImplForIntIndexAndAggBlock extends AbstractFact
     info.setMeasureOffset(msrOffset);
     info.setIsSortedKeyColumn(nodeHolder.getIsSortedKeyBlock());
     info.setKeyBlockIndexLength(nodeHolder.getKeyBlockIndexLength());
-    long[] keyBlockIndexOffsets = new long[nodeHolder.getKeyBlockIndexLength().length];
-    for (int i = 0; i < keyBlockIndexOffsets.length; i++) {
-      keyBlockIndexOffsets[i] = offset;
-      offset += nodeHolder.getKeyBlockIndexLength()[i];
-    }
     info.setDataIndexMapLength(nodeHolder.getDataIndexMapLength());
-    long[] dataIndexMapOffsets = new long[nodeHolder.getDataIndexMapLength().length];
-    for (int i = 0; i < dataIndexMapOffsets.length; i++) {
-      dataIndexMapOffsets[i] = offset;
-      offset += nodeHolder.getDataIndexMapLength()[i];
-    }
     info.setDataIndexMapOffsets(dataIndexMapOffsets);
     info.setKeyBlockIndexOffSets(keyBlockIndexOffsets);
     // set startkey

@@ -18,23 +18,22 @@
  */
 package org.apache.carbondata.core.carbon.datastore.chunk.reader.measure;
 
+import java.io.ByteArrayInputStream;
+import java.io.IOException;
+import java.io.ObjectInputStream;
+import java.util.BitSet;
 import java.util.List;
 
 import org.apache.carbondata.core.carbon.datastore.chunk.reader.MeasureColumnChunkReader;
-import org.apache.carbondata.core.carbon.metadata.blocklet.datachunk.DataChunk;
-import org.apache.carbondata.core.datastorage.store.compression.ValueCompressionModel;
-import org.apache.carbondata.core.datastorage.store.compression.ValueCompressonHolder;
-import org.apache.carbondata.core.datastorage.store.compression.ValueCompressonHolder.UnCompressValue;
+import org.apache.carbondata.core.carbon.metadata.blocklet.datachunk.PresenceMeta;
+import org.apache.carbondata.core.datastorage.store.compression.SnappyCompression.SnappyByteCompression;
+import org.apache.carbondata.core.metadata.ValueEncoderMeta;
+import org.apache.carbondata.core.util.CarbonUtil;
 
 /**
  * Measure block reader abstract class
  */
 public abstract class AbstractMeasureChunkReader implements MeasureColumnChunkReader {
-
-  /**
-   * metadata which was to used to compress and uncompress the measure value
-   */
-  protected ValueCompressionModel compressionModel;
 
   /**
    * file path from which blocks will be read
@@ -44,12 +43,7 @@ public abstract class AbstractMeasureChunkReader implements MeasureColumnChunkRe
   /**
    * measure chunk have the information about the metadata present in the file
    */
-  protected List<DataChunk> measureColumnChunk;
-
-  /**
-   * type of valu comprssion model selected for each measure column
-   */
-  protected UnCompressValue[] values;
+  protected List<Long> measureColumnChunkOffsets;
 
   /**
    * Constructor to get minimum parameter to create instance of this class
@@ -61,15 +55,50 @@ public abstract class AbstractMeasureChunkReader implements MeasureColumnChunkRe
    * @param isInMemory         in case of in memory it will read and holds the data and when
    *                           query request will come it will uncompress and the data
    */
-  public AbstractMeasureChunkReader(List<DataChunk> measureColumnChunk,
-      ValueCompressionModel compressionModel, String filePath, boolean isInMemory) {
-    this.measureColumnChunk = measureColumnChunk;
-    this.compressionModel = compressionModel;
+  public AbstractMeasureChunkReader(List<Long> measureColumnChunkOffsets, String filePath,
+      boolean isInMemory) {
+    this.measureColumnChunkOffsets = measureColumnChunkOffsets;
     this.filePath = filePath;
-    values =
-        new ValueCompressonHolder.UnCompressValue[compressionModel.getUnCompressValues().length];
-    for (int i = 0; i < values.length; i++) {
-      values[i] = compressionModel.getUnCompressValues()[i].getNew().getCompressorObject();
-    }
   }
+
+  /**
+   * Below method will be used to convert the thrift presence meta to wrapper
+   * presence meta
+   *
+   * @param presentMetadataThrift
+   * @return wrapper presence meta
+   */
+  protected PresenceMeta getPresenceMeta(
+      org.apache.carbondata.format.PresenceMeta presentMetadataThrift) {
+    PresenceMeta presenceMeta = new PresenceMeta();
+    presenceMeta.setRepresentNullValues(presentMetadataThrift.isRepresents_presence());
+    presenceMeta.setBitSet(BitSet.valueOf(
+        SnappyByteCompression.INSTANCE.unCompress(presentMetadataThrift.getPresent_bit_stream())));
+    return presenceMeta;
+  }
+
+  /**
+   * Below method will be used to convert the encode metadata to
+   * ValueEncoderMeta object
+   *
+   * @param encoderMeta
+   * @return ValueEncoderMeta object
+   */
+  protected ValueEncoderMeta deserializeEncoderMeta(byte[] encoderMeta) {
+    // TODO : should remove the unnecessary fields.
+    ByteArrayInputStream aos = null;
+    ObjectInputStream objStream = null;
+    ValueEncoderMeta meta = null;
+    try {
+      aos = new ByteArrayInputStream(encoderMeta);
+      objStream = new ObjectInputStream(aos);
+      meta = (ValueEncoderMeta) objStream.readObject();
+    } catch (ClassNotFoundException e) {
+      CarbonUtil.closeStreams(objStream);
+    } catch (IOException e) {
+      CarbonUtil.closeStreams(objStream);
+    }
+    return meta;
+  }
+
 }

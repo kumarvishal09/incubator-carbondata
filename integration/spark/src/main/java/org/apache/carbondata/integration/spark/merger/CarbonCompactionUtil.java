@@ -32,6 +32,7 @@ import org.apache.carbondata.core.carbon.datastore.block.TaskBlockInfo;
 import org.apache.carbondata.core.carbon.datastore.exception.IndexBuilderException;
 import org.apache.carbondata.core.carbon.metadata.blocklet.DataFileFooter;
 import org.apache.carbondata.core.carbon.metadata.schema.table.CarbonTable;
+import org.apache.carbondata.core.carbon.metadata.schema.table.column.ColumnSchema;
 import org.apache.carbondata.core.carbon.path.CarbonTablePath;
 import org.apache.carbondata.core.constants.CarbonCommonConstants;
 import org.apache.carbondata.core.datastorage.store.impl.FileFactory;
@@ -61,7 +62,6 @@ public class CarbonCompactionUtil {
     Map<String, TaskBlockInfo> segmentBlockInfoMapping =
         new HashMap<>(CarbonCommonConstants.DEFAULT_COLLECTION_SIZE);
 
-
     for (TableBlockInfo info : tableBlockInfoList) {
       String segId = info.getSegmentId();
       // check if segId is already present in map
@@ -74,8 +74,7 @@ public class CarbonCompactionUtil {
         groupCorrespodingInfoBasedOnTask(info, taskBlockInfoMapping, taskNo);
         // put the taskBlockInfo with respective segment id
         segmentBlockInfoMapping.put(segId, taskBlockInfoMapping);
-      } else
-      {
+      } else {
         groupCorrespodingInfoBasedOnTask(info, taskBlockInfoMapping, taskNo);
       }
     }
@@ -85,6 +84,7 @@ public class CarbonCompactionUtil {
 
   /**
    * Grouping the taskNumber and list of TableBlockInfo.
+   *
    * @param info
    * @param taskBlockMapping
    * @param taskNo
@@ -109,7 +109,8 @@ public class CarbonCompactionUtil {
    * @return
    */
   public static Map<String, List<DataFileFooter>> createDataFileFooterMappingForSegments(
-      List<TableBlockInfo> tableBlockInfoList) throws IndexBuilderException {
+      List<TableBlockInfo> tableBlockInfoList, List<ColumnSchema> columnschemaList)
+      throws IndexBuilderException {
 
     Map<String, List<DataFileFooter>> segmentBlockInfoMapping = new HashMap<>();
     for (TableBlockInfo blockInfo : tableBlockInfoList) {
@@ -122,7 +123,7 @@ public class CarbonCompactionUtil {
       try {
         dataFileMatadata = CarbonUtil
             .readMetadatFile(blockInfo.getFilePath(), blockInfo.getBlockOffset(),
-                blockInfo.getBlockLength());
+                blockInfo.getBlockLength(), columnschemaList);
       } catch (CarbonUtilException e) {
         throw new IndexBuilderException(e);
       }
@@ -142,6 +143,7 @@ public class CarbonCompactionUtil {
 
   /**
    * Check whether the file to indicate the compaction is present or not.
+   *
    * @param metaFolderPath
    * @return
    */
@@ -159,13 +161,14 @@ public class CarbonCompactionUtil {
         return true;
       }
     } catch (IOException e) {
-      LOGGER.error("Exception in isFileExist compaction request file " + e.getMessage() );
+      LOGGER.error("Exception in isFileExist compaction request file " + e.getMessage());
     }
     return false;
   }
 
   /**
    * Determine the type of the compaction received.
+   *
    * @param metaFolderPath
    * @return
    */
@@ -186,13 +189,14 @@ public class CarbonCompactionUtil {
       }
 
     } catch (IOException e) {
-      LOGGER.error("Exception in determining the compaction request file " + e.getMessage() );
+      LOGGER.error("Exception in determining the compaction request file " + e.getMessage());
     }
     return CompactionType.MINOR_COMPACTION;
   }
 
   /**
    * Delete the compation request file once the compaction is done.
+   *
    * @param metaFolderPath
    * @param compactionType
    * @return
@@ -229,6 +233,7 @@ public class CarbonCompactionUtil {
 
   /**
    * Creation of the compaction request if someother compaction is in progress.
+   *
    * @param metaFolderPath
    * @param compactionType
    * @return
@@ -256,7 +261,7 @@ public class CarbonCompactionUtil {
         LOGGER.info("Compaction request file : " + statusFile + " already exist.");
       }
     } catch (IOException e) {
-      LOGGER.error("Exception in creating the compaction request file " + e.getMessage() );
+      LOGGER.error("Exception in creating the compaction request file " + e.getMessage());
     }
     return false;
   }

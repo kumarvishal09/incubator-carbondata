@@ -99,8 +99,6 @@ struct PresenceMeta{
 struct DataChunk{
     1: required ChunkCompressionMeta chunk_meta; // the metadata of a chunk
     2: required bool rowMajor; // whether this chunk is a row chunk or column chunk ? Decide whether this can be replace with counting od columnIDs
-	/** The column IDs in this chunk, in the order in which the data is physically stored, will have atleast one column ID for columnar format, many column ID for row major format**/
-    3: required list<i32> column_ids;
     4: required i64 data_page_offset; // Offset of data page
     5: required i32 data_page_length; // length of data page
     6: optional i64 rowid_page_offset; //offset of row id page, only if encoded using inverted index
@@ -113,13 +111,15 @@ struct DataChunk{
     13: optional list<binary> encoder_meta; // extra information required by encoders
 }
 
-
+struct EncodeMeta{
+	1: required list<binary> encoder_meta; // extra information required by encoders
+}
 /**
 *	Information about a blocklet
 */
 struct BlockletInfo{
     1: required i32 num_rows;	// Number of rows in this blocklet
-    2: required list<DataChunk> column_data_chunks;	// Information about all column chunks in this blocklet
+    2: required list<i64> column_data_chunks_offsets;	// Information about all column chunks in this blocklet
 }
 
 /**
@@ -128,11 +128,10 @@ struct BlockletInfo{
 struct FileFooter{
     1: required i32 version; // version used for data compatibility
     2: required i64 num_rows; // Total number of rows in this file
-    3: required list<schema.ColumnSchema> table_columns;	// Description of columns in this file
-    4: required SegmentInfo segment_info;	// Segment info (will be same/repeated for all files in this segment)
-    5: required list<BlockletIndex> blocklet_index_list;	// blocklet index of all blocklets in this file
-    6: required list<BlockletInfo> blocklet_info_list;	// Information about blocklets of all columns in this file
-    7: optional dictionary.ColumnDictionaryChunk dictionary; // blocklet local dictionary
+    3: required list<i32> column_cardinalities;
+    4: required list<BlockletIndex> blocklet_index_list;	// blocklet index of all blocklets in this file
+    5: required list<BlockletInfo> blocklet_info_list;	// Information about blocklets of all columns in this file
+    6: optional dictionary.ColumnDictionaryChunk dictionary; // blocklet local dictionary
 }
 
 /**

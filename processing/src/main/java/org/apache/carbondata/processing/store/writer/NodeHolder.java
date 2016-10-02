@@ -27,12 +27,12 @@ public class NodeHolder {
   /**
    * keyArray
    */
-  private byte[] keyArray;
+  private byte[][] keyArray;
 
   /**
    * dataArray
    */
-  private byte[] dataArray;
+  private byte[][] dataArray;
 
   /**
    * measureLenght
@@ -141,28 +141,28 @@ public class NodeHolder {
   /**
    * @return the keyArray
    */
-  public byte[] getKeyArray() {
+  public byte[][] getKeyArray() {
     return keyArray;
   }
 
   /**
    * @param keyArray the keyArray to set
    */
-  public void setKeyArray(byte[] keyArray) {
+  public void setKeyArray(byte[][] keyArray) {
     this.keyArray = keyArray;
   }
 
   /**
    * @return the dataArray
    */
-  public byte[] getDataArray() {
+  public byte[][] getDataArray() {
     return dataArray;
   }
 
   /**
    * @param dataArray the dataArray to set
    */
-  public void setDataArray(byte[] dataArray) {
+  public void setDataArray(byte[][] dataArray) {
     this.dataArray = dataArray;
   }
 

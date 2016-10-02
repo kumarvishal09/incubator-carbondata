@@ -310,18 +310,11 @@ public class DataChunk implements Serializable {
     this.encodingList = encodingList;
   }
 
-  /**
-   * @return the valueEncoderMeta
-   */
-  public List<ValueEncoderMeta> getValueEncoderMeta() {
+  public List<ValueEncoderMeta> getValueEncoderMetaList() {
     return valueEncoderMetaList;
   }
 
-  /**
-   * @param valueEncoderMeta the valueEncoderMeta to set
-   */
-  public void setValueEncoderMeta(List<ValueEncoderMeta> valueEncoderMetaList) {
+  public void setValueEncoderMetaList(List<ValueEncoderMeta> valueEncoderMetaList) {
     this.valueEncoderMetaList = valueEncoderMetaList;
   }
-
 }

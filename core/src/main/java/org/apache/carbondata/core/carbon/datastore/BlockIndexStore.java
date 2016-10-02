@@ -38,6 +38,7 @@ import org.apache.carbondata.core.carbon.datastore.block.BlockInfo;
 import org.apache.carbondata.core.carbon.datastore.block.TableBlockInfo;
 import org.apache.carbondata.core.carbon.datastore.exception.IndexBuilderException;
 import org.apache.carbondata.core.carbon.metadata.blocklet.DataFileFooter;
+import org.apache.carbondata.core.carbon.metadata.schema.table.column.ColumnSchema;
 import org.apache.carbondata.core.constants.CarbonCommonConstants;
 import org.apache.carbondata.core.util.CarbonProperties;
 import org.apache.carbondata.core.util.CarbonUtil;
@@ -80,6 +81,8 @@ public class BlockIndexStore {
    */
   private Map<AbsoluteTableIdentifier, Object> tableLockMap;
 
+  private Map<BlockInfo, Future<AbstractIndex>> mapOfBlockInfoToFuture;
+
   private BlockIndexStore() {
     tableBlocksMap = new ConcurrentHashMap<AbsoluteTableIdentifier, Map<BlockInfo, AbstractIndex>>(
         CarbonCommonConstants.DEFAULT_COLLECTION_SIZE);
@@ -87,6 +90,7 @@ public class BlockIndexStore {
         CarbonCommonConstants.DEFAULT_COLLECTION_SIZE);
     blockInfoLock = new ConcurrentHashMap<BlockInfo, Object>();
     segmentIdToBlockListMap = new ConcurrentHashMap<>();
+    mapOfBlockInfoToFuture = new ConcurrentHashMap<>();
   }
 
   /**
@@ -108,10 +112,10 @@ public class BlockIndexStore {
    * @throws IndexBuilderException
    */
   public List<AbstractIndex> loadAndGetBlocks(List<TableBlockInfo> tableBlocksInfos,
-      AbsoluteTableIdentifier absoluteTableIdentifier) throws IndexBuilderException {
+      AbsoluteTableIdentifier absoluteTableIdentifier, List<ColumnSchema> columnSchemaList)
+      throws IndexBuilderException {
     AbstractIndex[] loadedBlock = new AbstractIndex[tableBlocksInfos.size()];
     addTableLockObject(absoluteTableIdentifier);
-
     // get the instance
     Object lockObject = tableLockMap.get(absoluteTableIdentifier);
     Map<BlockInfo, AbstractIndex> tableBlockMapTemp = null;
@@ -137,7 +141,6 @@ public class BlockIndexStore {
       blockInfosNeedToLoad = fillSegmentIdToTableInfoMap(tableBlocksInfos, absoluteTableIdentifier);
     }
     AbstractIndex tableBlock = null;
-    List<Future<AbstractIndex>> blocksList = new ArrayList<Future<AbstractIndex>>();
     int counter = -1;
     for (BlockInfo blockInfo : blockInfosNeedToLoad) {
       counter++;
@@ -173,7 +176,12 @@ public class BlockIndexStore {
           tableBlock = tableBlockMapTemp.get(blockInfo);
           // if still block is not present then load the block
           if (null == tableBlock) {
-            blocksList.add(executor.submit(new BlockLoaderThread(blockInfo, tableBlockMapTemp)));
+            if (null == mapOfBlockInfoToFuture.get(blockInfo)) {
+              mapOfBlockInfoToFuture.put(blockInfo, executor
+                  .submit(new BlockLoaderThread(blockInfo, tableBlockMapTemp, columnSchemaList)));
+            }
+          } else {
+            loadedBlock[counter] = tableBlock;
           }
         }
       } else {
@@ -190,7 +198,7 @@ public class BlockIndexStore {
       throw new IndexBuilderException(e);
     }
     // fill the block which were not loaded before to loaded blocks array
-    fillLoadedBlocks(loadedBlock, blocksList);
+    fillLoadedBlocks(loadedBlock, blockInfosNeedToLoad);
     return Arrays.asList(loadedBlock);
   }
 
@@ -234,13 +242,12 @@ public class BlockIndexStore {
    * @param blocksList       blocks loaded in thread
    * @throws IndexBuilderException in case of any failure
    */
-  private void fillLoadedBlocks(AbstractIndex[] loadedBlockArray,
-      List<Future<AbstractIndex>> blocksList) throws IndexBuilderException {
-    int blockCounter = 0;
+  private void fillLoadedBlocks(AbstractIndex[] loadedBlockArray, List<BlockInfo> blockInfos)
+      throws IndexBuilderException {
     for (int i = 0; i < loadedBlockArray.length; i++) {
       if (null == loadedBlockArray[i]) {
         try {
-          loadedBlockArray[i] = blocksList.get(blockCounter++).get();
+          loadedBlockArray[i] = mapOfBlockInfoToFuture.get(blockInfos.get(i)).get();
         } catch (InterruptedException | ExecutionException e) {
           throw new IndexBuilderException(e);
         }
@@ -250,13 +257,13 @@ public class BlockIndexStore {
   }
 
   private AbstractIndex loadBlock(Map<BlockInfo, AbstractIndex> tableBlockMapTemp,
-      BlockInfo blockInfo) throws CarbonUtilException {
+      BlockInfo blockInfo, List<ColumnSchema> columnSchemaList) throws CarbonUtilException {
     AbstractIndex tableBlock;
     DataFileFooter footer;
     // getting the data file meta data of the block
     footer = CarbonUtil.readMetadatFile(blockInfo.getTableBlockInfo().getFilePath(),
         blockInfo.getTableBlockInfo().getBlockOffset(),
-        blockInfo.getTableBlockInfo().getBlockLength());
+        blockInfo.getTableBlockInfo().getBlockLength(), columnSchemaList);
     tableBlock = new BlockIndex();
     footer.setBlockInfo(blockInfo);
     // building the block
@@ -345,14 +352,18 @@ public class BlockIndexStore {
     // block info
     private BlockInfo blockInfo;
 
-    private BlockLoaderThread(BlockInfo blockInfo, Map<BlockInfo, AbstractIndex> tableBlockMap) {
+    private List<ColumnSchema> columnSchemaList;
+
+    private BlockLoaderThread(BlockInfo blockInfo, Map<BlockInfo, AbstractIndex> tableBlockMap,
+        List<ColumnSchema> columnSchemaList) {
       this.tableBlockMap = tableBlockMap;
       this.blockInfo = blockInfo;
+      this.columnSchemaList = columnSchemaList;
     }
 
     @Override public AbstractIndex call() throws Exception {
       // load and return the loaded blocks
-      return loadBlock(tableBlockMap, blockInfo);
+      return loadBlock(tableBlockMap, blockInfo, columnSchemaList);
     }
   }
 }

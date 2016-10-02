@@ -23,12 +23,12 @@ import java.util.ArrayList;
 import java.util.List;
 
 import org.apache.carbondata.core.carbon.datastore.chunk.reader.DimensionColumnChunkReader;
-import org.apache.carbondata.core.carbon.metadata.blocklet.datachunk.DataChunk;
 import org.apache.carbondata.core.constants.CarbonCommonConstants;
 import org.apache.carbondata.core.datastorage.store.compression.Compressor;
 import org.apache.carbondata.core.datastorage.store.compression.SnappyCompression;
 import org.apache.carbondata.core.keygenerator.mdkey.NumberCompressor;
 import org.apache.carbondata.core.util.CarbonProperties;
+import org.apache.carbondata.format.Encoding;
 
 /**
  * Class which will have all the common properties and behavior among all type
@@ -46,7 +46,7 @@ public abstract class AbstractChunkReader implements DimensionColumnChunkReader 
    * data chunk list which holds the information
    * about the data block metadata
    */
-  protected List<DataChunk> dimensionColumnChunk;
+  protected List<Long> dimensionColumnChunkOffsets;
 
   /**
    * size of the each column value
@@ -79,9 +79,9 @@ public abstract class AbstractChunkReader implements DimensionColumnChunkReader 
    * @param eachColumnValueSize  size of the each column value
    * @param filePath             file from which data will be read
    */
-  public AbstractChunkReader(List<DataChunk> dimensionColumnChunk, int[] eachColumnValueSize,
+  public AbstractChunkReader(List<Long> dimensionColumnChunkOffsets, int[] eachColumnValueSize,
       String filePath) {
-    this.dimensionColumnChunk = dimensionColumnChunk;
+    this.dimensionColumnChunkOffsets = dimensionColumnChunkOffsets;
     this.eachColumnValueSize = eachColumnValueSize;
     this.filePath = filePath;
     int numberOfElement = 0;
@@ -139,5 +139,16 @@ public abstract class AbstractChunkReader implements DimensionColumnChunkReader 
       dataChunk.add(data);
     }
     return dataChunk;
+  }
+
+  /**
+   * Below method will be used to check whether particular encoding is present
+   * in the dimension or not
+   *
+   * @param encoding encoding to search
+   * @return if encoding is present in dimension
+   */
+  protected boolean hasEncoding(List<Encoding> encodings, Encoding encoding) {
+    return encodings.contains(encoding);
   }
 }
