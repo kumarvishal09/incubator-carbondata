@@ -47,99 +47,105 @@ object CarbonSessionExample {
       .config("spark.driver.host", "localhost")
       .getOrCreateCarbonSession(storeLocation)
 
-    spark.sparkContext.setLogLevel("WARN")
+    spark.sparkContext.setLogLevel("INFO")
 
-    spark.sql("DROP TABLE IF EXISTS carbon_table")
+//    spark.sql("DROP TABLE IF EXISTS carbon_table")
+//
+//    // Create table
+//    spark.sql(
+//      s"""
+//         | CREATE TABLE carbon_table(
+//         | shortField SHORT,
+//         | intField INT,
+//         | bigintField LONG,
+//         | doubleField DOUBLE,
+//         | stringField STRING,
+//         | timestampField TIMESTAMP,
+//         | decimalField DECIMAL(18,2),
+//         | dateField DATE,
+//         | charField CHAR(5),
+//         | floatField FLOAT,
+//         | complexData ARRAY<STRING>
+//         | )
+//         | STORED BY 'carbondata'
+//         | TBLPROPERTIES('SORT_COLUMNS'='', 'DICTIONARY_INCLUDE'='dateField, charField')
+//       """.stripMargin)
+//
+//    val path = s"$rootPath/examples/spark2/src/main/resources/data.csv"
+//
+//    // scalastyle:off
+//    spark.sql(
+//      s"""
+//         | LOAD DATA LOCAL INPATH '$path'
+//         | INTO TABLE carbon_table
+//         | OPTIONS('HEADER'='true', 'COMPLEX_DELIMITER_LEVEL_1'='#')
+//       """.stripMargin)
+//    // scalastyle:on
+//
+//    spark.sql(
+//      s"""
+//        | SELECT *
+//        | FROM carbon_table
+//        | WHERE stringfield = 'spark' AND decimalField > 40
+//      """.stripMargin).show()
+//
+//    spark.sql(
+//      s"""
+//         | SELECT *
+//         | FROM carbon_table WHERE length(stringField) = 5
+//       """.stripMargin).show()
+//
+//    spark.sql(
+//      s"""
+//         | SELECT *
+//         | FROM carbon_table WHERE date_format(dateField, "yyyy-MM-dd") = "2015-07-23"
+//       """.stripMargin).show()
+//
+//    spark.sql("SELECT count(stringField) FROM carbon_table").show()
+//
+//    spark.sql(
+//      s"""
+//         | SELECT sum(intField), stringField
+//         | FROM carbon_table
+//         | GROUP BY stringField
+//       """.stripMargin).show()
+//
+//    spark.sql(
+//      s"""
+//        | SELECT t1.*, t2.*
+//        | FROM carbon_table t1, carbon_table t2
+//        | WHERE t1.stringField = t2.stringField
+//      """.stripMargin).show()
+//
+//    spark.sql(
+//      s"""
+//        | WITH t1 AS (
+//        | SELECT * FROM carbon_table
+//        | UNION ALL
+//        | SELECT * FROM carbon_table
+//        | )
+//        | SELECT t1.*, t2.*
+//        | FROM t1, carbon_table t2
+//        | WHERE t1.stringField = t2.stringField
+//      """.stripMargin).show()
+//
+//    spark.sql(
+//      s"""
+//         | SELECT *
+//         | FROM carbon_table
+//         | WHERE stringField = 'spark' and floatField > 2.8
+//       """.stripMargin).show()
+//
+//    // Drop table
+//    spark.sql("DROP TABLE IF EXISTS carbon_table")
+//
+//    spark.stop()
 
-    // Create table
-    spark.sql(
-      s"""
-         | CREATE TABLE carbon_table(
-         | shortField SHORT,
-         | intField INT,
-         | bigintField LONG,
-         | doubleField DOUBLE,
-         | stringField STRING,
-         | timestampField TIMESTAMP,
-         | decimalField DECIMAL(18,2),
-         | dateField DATE,
-         | charField CHAR(5),
-         | floatField FLOAT,
-         | complexData ARRAY<STRING>
-         | )
-         | STORED BY 'carbondata'
-         | TBLPROPERTIES('SORT_COLUMNS'='', 'DICTIONARY_INCLUDE'='dateField, charField')
-       """.stripMargin)
 
-    val path = s"$rootPath/examples/spark2/src/main/resources/data.csv"
-
-    // scalastyle:off
-    spark.sql(
-      s"""
-         | LOAD DATA LOCAL INPATH '$path'
-         | INTO TABLE carbon_table
-         | OPTIONS('HEADER'='true', 'COMPLEX_DELIMITER_LEVEL_1'='#')
-       """.stripMargin)
-    // scalastyle:on
-
-    spark.sql(
-      s"""
-        | SELECT *
-        | FROM carbon_table
-        | WHERE stringfield = 'spark' AND decimalField > 40
-      """.stripMargin).show()
-
-    spark.sql(
-      s"""
-         | SELECT *
-         | FROM carbon_table WHERE length(stringField) = 5
-       """.stripMargin).show()
-
-    spark.sql(
-      s"""
-         | SELECT *
-         | FROM carbon_table WHERE date_format(dateField, "yyyy-MM-dd") = "2015-07-23"
-       """.stripMargin).show()
-
-    spark.sql("SELECT count(stringField) FROM carbon_table").show()
-
-    spark.sql(
-      s"""
-         | SELECT sum(intField), stringField
-         | FROM carbon_table
-         | GROUP BY stringField
-       """.stripMargin).show()
-
-    spark.sql(
-      s"""
-        | SELECT t1.*, t2.*
-        | FROM carbon_table t1, carbon_table t2
-        | WHERE t1.stringField = t2.stringField
-      """.stripMargin).show()
-
-    spark.sql(
-      s"""
-        | WITH t1 AS (
-        | SELECT * FROM carbon_table
-        | UNION ALL
-        | SELECT * FROM carbon_table
-        | )
-        | SELECT t1.*, t2.*
-        | FROM t1, carbon_table t2
-        | WHERE t1.stringField = t2.stringField
-      """.stripMargin).show()
-
-    spark.sql(
-      s"""
-         | SELECT *
-         | FROM carbon_table
-         | WHERE stringField = 'spark' and floatField > 2.8
-       """.stripMargin).show()
-
-    // Drop table
-    spark.sql("DROP TABLE IF EXISTS carbon_table")
-
-    spark.stop()
+//    spark.sql("create table kunal6 (a string, b string, c string) stored by 'carbondata' tblProperties('DICTIONARY_INCLUDE' = 'a')")
+//    spark.sql("create table kunal7agg stored BY 'carbondata' tblproperties('parent'='sales') as select a,sum(b) from kunal6 group by a" )
+    spark.sql("desc formatted kunal7agg").show(truncate = false)
+//    spark.sql("create table agg_same  as select column1, count(column2), sum(column2) from main_same group by column1")
   }
 
 }

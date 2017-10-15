@@ -24,6 +24,8 @@ import java.io.DataOutput;
 import java.io.DataOutputStream;
 import java.io.IOException;
 import java.io.Serializable;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 
 import org.apache.carbondata.common.logging.LogService;
@@ -79,7 +81,13 @@ public class TableInfo implements Serializable, Writable {
   // this idenifier is a lazy field which will be created when it is used first time
   private AbsoluteTableIdentifier identifier;
 
+  private List<ChildSchema> childSchemaList;
+
+  private List<RelationIdentifier> parentRelationIdentifiers;
+
   public TableInfo() {
+    childSchemaList = new ArrayList<>();
+    this.parentRelationIdentifiers = new ArrayList<>();
   }
 
   /**
@@ -160,6 +168,22 @@ public class TableInfo implements Serializable, Writable {
     this.storePath = storePath;
   }
 
+  public List<ChildSchema> getChildSchemaList() {
+    return childSchemaList;
+  }
+
+  public void setChildSchemaList(List<ChildSchema> childSchemaList) {
+    this.childSchemaList = childSchemaList;
+  }
+
+  public List<RelationIdentifier> getParentRelationIdentifiers() {
+    return parentRelationIdentifiers;
+  }
+
+  public void setParentRelationIdentifiers(List<RelationIdentifier> parentRelationIdentifiers) {
+    this.parentRelationIdentifiers = parentRelationIdentifiers;
+  }
+
   /**
    * to generate the hash code
    */
@@ -228,10 +252,17 @@ public class TableInfo implements Serializable, Writable {
     out.writeLong(lastUpdatedTime);
     out.writeUTF(metaDataFilepath);
     out.writeUTF(storePath);
+    out.writeShort(childSchemaList.size());
+    for (int i = 0; i < childSchemaList.size(); i++) {
+      childSchemaList.get(i).write(out);
+    }
+    out.writeShort(parentRelationIdentifiers.size());
+    for (int i = 0; i < parentRelationIdentifiers.size(); i++) {
+      parentRelationIdentifiers.get(i).write(out);
+    }
   }
 
-  @Override
-  public void readFields(DataInput in) throws IOException {
+  @Override public void readFields(DataInput in) throws IOException {
     this.databaseName = in.readUTF();
     this.tableUniqueName = in.readUTF();
     this.factTable = new TableSchema();
@@ -239,6 +270,20 @@ public class TableInfo implements Serializable, Writable {
     this.lastUpdatedTime = in.readLong();
     this.metaDataFilepath = in.readUTF();
     this.storePath = in.readUTF();
+    short numberOfChildTable = in.readShort();
+    this.childSchemaList = new ArrayList<>(numberOfChildTable);
+    for (int i = 0; i < numberOfChildTable; i++) {
+      ChildSchema childSchema = new ChildSchema(null, null, null);
+      childSchema.readFields(in);
+      childSchemaList.add(childSchema);
+    }
+    int parentRelationIdentifiersSize = in.readShort();
+    this.parentRelationIdentifiers = new ArrayList<>(parentRelationIdentifiersSize);
+    for (int i = 0; i < parentRelationIdentifiersSize; i++) {
+      RelationIdentifier relationIdentifier = new RelationIdentifier(null, null, null);
+      relationIdentifier.readFields(in);
+      parentRelationIdentifiers.add(relationIdentifier);
+    }
   }
 
   public AbsoluteTableIdentifier getOrCreateAbsoluteTableIdentifier() {
