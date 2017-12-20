@@ -294,6 +294,8 @@ case class CarbonPreAggregateQueryRules(sparkSession: SparkSession) extends Rule
                   childPlan,
                   carbonTable,
                   agg)
+              CarbonSession.threadSet(CarbonCommonConstants.SUPPORT_DIRECT_QUERY_ON_DATAMAP,
+                "true")
               Aggregate(updatedGroupExp,
                 updatedAggExp,
                 CarbonReflectionUtils
@@ -346,6 +348,8 @@ case class CarbonPreAggregateQueryRules(sparkSession: SparkSession) extends Rule
                   childPlan,
                   carbonTable,
                   agg)
+              CarbonSession.threadSet(CarbonCommonConstants.SUPPORT_DIRECT_QUERY_ON_DATAMAP,
+                "true")
               Aggregate(updatedGroupExp,
                 updatedAggExp,
                 CarbonReflectionUtils
@@ -401,6 +405,8 @@ case class CarbonPreAggregateQueryRules(sparkSession: SparkSession) extends Rule
                   childPlan,
                   carbonTable,
                   agg)
+              CarbonSession.threadSet(CarbonCommonConstants.SUPPORT_DIRECT_QUERY_ON_DATAMAP,
+                "true")
               Aggregate(updatedGroupExp,
                 updatedAggExp,
                 Filter(updatedFilterExpression.get,
@@ -461,6 +467,8 @@ case class CarbonPreAggregateQueryRules(sparkSession: SparkSession) extends Rule
                   childPlan,
                   carbonTable,
                   agg)
+              CarbonSession.threadSet(CarbonCommonConstants.SUPPORT_DIRECT_QUERY_ON_DATAMAP,
+                "true")
               Aggregate(updatedGroupExp,
                 updatedAggExp,
                 Filter(updatedFilterExpression.get,

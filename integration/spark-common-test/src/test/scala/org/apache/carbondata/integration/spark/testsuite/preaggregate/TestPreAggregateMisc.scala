@@ -16,19 +16,29 @@
  */
 package org.apache.carbondata.integration.spark.testsuite.preaggregate
 
-import org.apache.spark.sql.{CarbonEnv, Row}
+import org.apache.spark.sql.{AnalysisException, CarbonEnv, Row}
 import org.apache.spark.sql.test.util.QueryTest
 import org.scalatest.{BeforeAndAfterAll, Ignore}
 
 import org.apache.carbondata.core.constants.CarbonCommonConstants
+import org.apache.carbondata.core.util.CarbonProperties
 
-@Ignore
 class TestPreAggregateMisc extends QueryTest with BeforeAndAfterAll {
+
   override def beforeAll: Unit = {
+    CarbonProperties.getInstance()
+      .addProperty(CarbonCommonConstants.VALIDATE_DIRECT_QUERY_ON_DATAMAP, "true")
     sql("drop table if exists mainTable")
     sql("CREATE TABLE mainTable(id int, name string, city string, age string) STORED BY 'org.apache.carbondata.format'")
     sql(s"LOAD DATA LOCAL INPATH '$resourcesPath/measureinsertintotest.csv' into table mainTable")
     sql(s"LOAD DATA LOCAL INPATH '$resourcesPath/measureinsertintotest.csv' into table mainTable")
+  }
+
+  test("test Direct Query on PreAggregate") {
+    sql("create datamap agg100 on table mainTable using 'preaggregate' as select name,sum(age) from mainTable group by name")
+    intercept[AnalysisException] {
+      sql("select * from maintable_agg100").collect()
+    }
   }
   test("test PreAggregate With Set Segments property") {
     sql("create datamap agg1 on table mainTable using 'preaggregate' as select name,sum(age) from mainTable group by name")
@@ -74,5 +84,7 @@ class TestPreAggregateMisc extends QueryTest with BeforeAndAfterAll {
 
   override def afterAll: Unit = {
     sql("drop table if exists mainTable")
+    CarbonProperties.getInstance()
+      .addProperty(CarbonCommonConstants.VALIDATE_DIRECT_QUERY_ON_DATAMAP, "true")
   }
 }

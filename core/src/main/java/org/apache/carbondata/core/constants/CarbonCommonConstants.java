@@ -865,6 +865,24 @@ public final class CarbonCommonConstants {
   public static final String CARBON_MERGE_SORT_PREFETCH_DEFAULT = "true";
 
   /**
+   * If we are executing insert into query from source table using select statement
+   * & loading the same source table concurrently, when select happens on source table
+   * during the data load , it gets new record for which dictionary is not generated,
+   * So there will be inconsistency. To avoid this condition we can persist the dataframe
+   * into MEMORY_AND_DISK and perform insert into operation. By default this value
+   * will be false because no need to persist the dataframe in all cases. If user want
+   * to run load and insert queries on source table concurrently then user can enable this flag
+   */
+  @CarbonProperty
+  public static final String CARBON_INSERT_PERSIST_ENABLED = "carbon.insert.persist.enable";
+
+  /**
+   * by default rdd will not be persisted in the insert case.
+
+   */
+  public static final String CARBON_INSERT_PERSIST_ENABLED_DEFAULT = "false";
+
+  /**
    * default name of data base
    */
   public static final String DATABASE_DEFAULT_NAME = "default";
@@ -1541,6 +1559,14 @@ public final class CarbonCommonConstants {
   // As Short data type is used for storing the length of a column during data processing hence
   // the maximum characters that can be supported should be less than Short max value
   public static final int MAX_CHARS_PER_COLUMN_DEFAULT = 32000;
+
+  @CarbonProperty
+  public static final String SUPPORT_DIRECT_QUERY_ON_DATAMAP =
+      "carbon.support.direct.query.on.datamap";
+
+  @CarbonProperty
+  public static final String VALIDATE_DIRECT_QUERY_ON_DATAMAP =
+      "validate.support.direct.query.on.datamap";
 
   private CarbonCommonConstants() {
   }

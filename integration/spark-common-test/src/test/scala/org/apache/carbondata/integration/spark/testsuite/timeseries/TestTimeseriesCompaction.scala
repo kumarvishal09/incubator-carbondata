@@ -28,6 +28,8 @@ class TestTimeseriesCompaction extends QueryTest with BeforeAndAfterAll {
 
   var isCompactionEnabled = false
   override def beforeAll: Unit = {
+    CarbonProperties.getInstance()
+      .addProperty(CarbonCommonConstants.VALIDATE_DIRECT_QUERY_ON_DATAMAP, "false")
     SparkUtil4Test.createTaskMockUp(sqlContext)
     CarbonProperties.getInstance()
       .addProperty(CarbonCommonConstants.CARBON_TIMESTAMP_FORMAT,
@@ -69,5 +71,7 @@ class TestTimeseriesCompaction extends QueryTest with BeforeAndAfterAll {
     sql("drop table if exists mainTable")
     CarbonProperties.getInstance()
       .addProperty(CarbonCommonConstants.ENABLE_AUTO_LOAD_MERGE, isCompactionEnabled+"")
+    CarbonProperties.getInstance()
+      .addProperty(CarbonCommonConstants.VALIDATE_DIRECT_QUERY_ON_DATAMAP, "false")
   }
 }

@@ -24,9 +24,14 @@ import org.apache.spark.sql.hive.CarbonRelation
 import org.apache.spark.sql.test.util.QueryTest
 import org.scalatest.BeforeAndAfterAll
 
+import org.apache.carbondata.core.constants.CarbonCommonConstants
+import org.apache.carbondata.core.util.CarbonProperties
+
 class TestPreAggregateExpressions extends QueryTest with BeforeAndAfterAll {
 
   override def beforeAll: Unit = {
+    CarbonProperties.getInstance()
+      .addProperty(CarbonCommonConstants.VALIDATE_DIRECT_QUERY_ON_DATAMAP, "false")
     sql("DROP TABLE IF EXISTS mainTable")
     sql("CREATE TABLE mainTable(id int, name string, city string, age string) STORED BY 'org.apache.carbondata.format'")
     sql(s"LOAD DATA LOCAL INPATH '$resourcesPath/measureinsertintotest.csv' into table mainTable")
@@ -165,6 +170,8 @@ class TestPreAggregateExpressions extends QueryTest with BeforeAndAfterAll {
 
   override def afterAll: Unit = {
     sql("DROP TABLE IF EXISTS mainTable")
+    CarbonProperties.getInstance()
+      .addProperty(CarbonCommonConstants.VALIDATE_DIRECT_QUERY_ON_DATAMAP, "true")
   }
 
 }

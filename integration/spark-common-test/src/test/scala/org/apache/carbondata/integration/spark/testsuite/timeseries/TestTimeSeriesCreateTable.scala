@@ -19,9 +19,14 @@ package org.apache.carbondata.integration.spark.testsuite.timeseries
 import org.apache.spark.sql.test.util.QueryTest
 import org.scalatest.{BeforeAndAfterAll, Ignore}
 
+import org.apache.carbondata.core.constants.CarbonCommonConstants
+import org.apache.carbondata.core.util.CarbonProperties
+
 class TestTimeSeriesCreateTable extends QueryTest with BeforeAndAfterAll {
 
   override def beforeAll: Unit = {
+    CarbonProperties.getInstance()
+      .addProperty(CarbonCommonConstants.VALIDATE_DIRECT_QUERY_ON_DATAMAP, "false")
     sql("drop table if exists mainTable")
     sql("CREATE TABLE mainTable(dataTime timestamp, name string, city string, age int) STORED BY 'org.apache.carbondata.format'")
     sql("create datamap agg0 on table mainTable using 'preaggregate' DMPROPERTIES ('timeseries.eventTime'='dataTime', 'timeseries.hierarchy'='second=1,hour=1,day=1,month=1,year=1') as select dataTime, sum(age) from mainTable group by dataTime")
@@ -133,5 +138,7 @@ class TestTimeSeriesCreateTable extends QueryTest with BeforeAndAfterAll {
 
   override def afterAll: Unit = {
     sql("drop table if exists mainTable")
+    CarbonProperties.getInstance()
+      .addProperty(CarbonCommonConstants.VALIDATE_DIRECT_QUERY_ON_DATAMAP, "true")
   }
 }

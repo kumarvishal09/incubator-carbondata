@@ -20,9 +20,14 @@ package org.apache.carbondata.integration.spark.testsuite.preaggregate
 import org.apache.spark.sql.test.util.QueryTest
 import org.scalatest.BeforeAndAfterAll
 
+import org.apache.carbondata.core.constants.CarbonCommonConstants
+import org.apache.carbondata.core.util.CarbonProperties
+
 class TestPreAggregateDrop extends QueryTest with BeforeAndAfterAll {
 
   override def beforeAll {
+    CarbonProperties.getInstance()
+      .addProperty(CarbonCommonConstants.VALIDATE_DIRECT_QUERY_ON_DATAMAP, "false")
     sql("drop table if exists maintable")
     sql("drop datamap if exists preagg1 on table maintable")
     sql("drop datamap if exists preagg2 on table maintable")
@@ -103,6 +108,8 @@ class TestPreAggregateDrop extends QueryTest with BeforeAndAfterAll {
     sql("drop table if exists maintable1")
     sql("drop datamap if exists preagg1 on table maintable")
     sql("drop datamap if exists preagg2 on table maintable")
+    CarbonProperties.getInstance()
+      .addProperty(CarbonCommonConstants.VALIDATE_DIRECT_QUERY_ON_DATAMAP, "true")
   }
   
 }

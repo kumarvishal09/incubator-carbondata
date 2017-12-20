@@ -23,9 +23,14 @@ import org.apache.spark.sql.{CarbonDatasourceHadoopRelation, Row}
 import org.apache.spark.sql.test.util.QueryTest
 import org.scalatest.BeforeAndAfterAll
 
+import org.apache.carbondata.core.constants.CarbonCommonConstants
+import org.apache.carbondata.core.util.CarbonProperties
+
 class TestPreAggregateTableSelection extends QueryTest with BeforeAndAfterAll {
 
   override def beforeAll: Unit = {
+    CarbonProperties.getInstance()
+      .addProperty(CarbonCommonConstants.VALIDATE_DIRECT_QUERY_ON_DATAMAP, "false")
     sql("drop table if exists mainTable")
     sql("drop table if exists agg0")
     sql("drop table if exists agg1")
@@ -302,6 +307,8 @@ test("test PreAggregate table selection with timeseries and normal together") {
   override def afterAll: Unit = {
     sql("drop table if exists mainTable")
     sql("drop table if exists lineitem")
+    CarbonProperties.getInstance()
+      .addProperty(CarbonCommonConstants.VALIDATE_DIRECT_QUERY_ON_DATAMAP, "true")
   }
 
 }

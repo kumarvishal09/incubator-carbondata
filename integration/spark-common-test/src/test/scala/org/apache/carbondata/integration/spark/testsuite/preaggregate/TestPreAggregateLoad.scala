@@ -30,6 +30,8 @@ class TestPreAggregateLoad extends QueryTest with BeforeAndAfterAll {
   val testData = s"$resourcesPath/sample.csv"
 
   override def beforeAll(): Unit = {
+    CarbonProperties.getInstance()
+      .addProperty(CarbonCommonConstants.VALIDATE_DIRECT_QUERY_ON_DATAMAP, "false")
     SparkUtil4Test.createTaskMockUp(sqlContext)
     sql("DROP TABLE IF EXISTS maintable")
   }
@@ -310,5 +312,10 @@ test("check load and select for avg double datatype") {
     checkAnswer(sql("select name,avg(salary) from maintbl group by name"), rows)
   }
 
+  override def afterAll(): Unit = {
+    CarbonProperties.getInstance()
+      .addProperty(CarbonCommonConstants.VALIDATE_DIRECT_QUERY_ON_DATAMAP, "true")
+    sql("DROP TABLE IF EXISTS maintable")
+  }
 
 }

@@ -21,11 +21,16 @@ import org.apache.spark.sql.test.util.QueryTest
 import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach}
 import org.scalatest.Matchers._
 
+import org.apache.carbondata.core.constants.CarbonCommonConstants
+import org.apache.carbondata.core.util.CarbonProperties
+
 class TestPreAggregateCompaction extends QueryTest with BeforeAndAfterEach with BeforeAndAfterAll {
 
   val testData = s"$resourcesPath/sample.csv"
 
   override def beforeEach(): Unit = {
+    CarbonProperties.getInstance()
+      .addProperty(CarbonCommonConstants.VALIDATE_DIRECT_QUERY_ON_DATAMAP, "false")
     sql("drop database if exists compaction cascade")
     sql("create database if not exists compaction")
     sql("use compaction")
@@ -176,6 +181,8 @@ class TestPreAggregateCompaction extends QueryTest with BeforeAndAfterEach with 
   override def afterAll(): Unit = {
     sql("drop database if exists compaction cascade")
     sql("use default")
+    CarbonProperties.getInstance()
+      .addProperty(CarbonCommonConstants.VALIDATE_DIRECT_QUERY_ON_DATAMAP, "true")
   }
 
 }

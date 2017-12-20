@@ -32,6 +32,8 @@ class TestTimeseriesDataLoad extends QueryTest with BeforeAndAfterAll {
     SparkUtil4Test.createTaskMockUp(sqlContext)
     CarbonProperties.getInstance()
       .addProperty(CarbonCommonConstants.CARBON_TIMESTAMP_FORMAT, CarbonCommonConstants.CARBON_TIMESTAMP_DEFAULT_FORMAT)
+    CarbonProperties.getInstance()
+      .addProperty(CarbonCommonConstants.VALIDATE_DIRECT_QUERY_ON_DATAMAP, "false")
     sql("drop table if exists mainTable")
     sql("drop table if exists table_03")
     sql("CREATE TABLE mainTable(mytime timestamp, name string, age int) STORED BY 'org.apache.carbondata.format'")
@@ -110,5 +112,7 @@ class TestTimeseriesDataLoad extends QueryTest with BeforeAndAfterAll {
   override def afterAll: Unit = {
     sql("drop table if exists mainTable")
     sql("drop table if exists table_03")
+    CarbonProperties.getInstance()
+      .addProperty(CarbonCommonConstants.VALIDATE_DIRECT_QUERY_ON_DATAMAP, "true")
   }
 }

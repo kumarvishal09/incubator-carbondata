@@ -8,12 +8,16 @@ import org.apache.spark.sql.test.util.QueryTest
 import org.scalatest.BeforeAndAfterAll
 import scala.collection.JavaConverters._
 
+import org.apache.carbondata.core.constants.CarbonCommonConstants
 import org.apache.carbondata.core.metadata.encoder.Encoding
 import org.apache.carbondata.core.metadata.schema.table.CarbonTable
+import org.apache.carbondata.core.util.CarbonProperties
 
 class TestPreAggCreateCommand extends QueryTest with BeforeAndAfterAll {
 
   override def beforeAll {
+    CarbonProperties.getInstance()
+      .addProperty(CarbonCommonConstants.VALIDATE_DIRECT_QUERY_ON_DATAMAP, "flase")
     sql("drop table if exists PreAggMain")
     sql("drop table if exists PreAggMain1")
     sql("drop table if exists PreAggMain2")
@@ -239,5 +243,7 @@ class TestPreAggCreateCommand extends QueryTest with BeforeAndAfterAll {
     sql("drop table if exists PreAggMain")
     sql("drop table if exists PreAggMain1")
     sql("drop table if exists PreAggMain2")
+    CarbonProperties.getInstance()
+      .addProperty(CarbonCommonConstants.VALIDATE_DIRECT_QUERY_ON_DATAMAP, "true")
   }
 }
