@@ -115,11 +115,9 @@ public class CompressedDimensionChunkFileBasedReaderV2 extends AbstractChunkRead
     return dataChunks;
   }
 
-  public DimensionColumnPage decodeColumnPage(
-      DimensionRawColumnChunk dimensionRawColumnChunk, int pageNumber) throws IOException {
+  public DimensionColumnPage decodeColumnPage(DimensionRawColumnChunk dimensionRawColumnChunk,
+      int pageNumber, int[] invertedIndexes, int[] invertedIndexesReverse) throws IOException {
     byte[] dataPage = null;
-    int[] invertedIndexes = null;
-    int[] invertedIndexesReverse = null;
     int[] rlePage = null;
     DataChunk2 dimensionColumnChunk = null;
     int copySourcePoint = (int) dimensionRawColumnChunk.getOffSet();

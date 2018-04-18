@@ -190,8 +190,9 @@ public class CompressedDimensionChunkFileBasedReaderV3 extends AbstractChunkRead
    * @param pageNumber              number
    * @return DimensionColumnPage
    */
-  @Override public DimensionColumnPage decodeColumnPage(
-      DimensionRawColumnChunk rawColumnPage, int pageNumber) throws IOException, MemoryException {
+  @Override public DimensionColumnPage decodeColumnPage(DimensionRawColumnChunk rawColumnPage,
+      int pageNumber, int[] invertedIndexes, int[] invertedIndexReverse)
+      throws IOException, MemoryException {
     // data chunk of blocklet column
     DataChunk3 dataChunk3 = rawColumnPage.getDataChunkV3();
     // get the data buffer
@@ -282,5 +283,18 @@ public class CompressedDimensionChunkFileBasedReaderV3 extends AbstractChunkRead
               eachColumnValueSize[rawColumnPage.getColumnIndex()]);
     }
     return columnDataChunk;
+  }
+
+  /**
+   * Below method will be used to create the inverted index reverse
+   * this will be used to point to actual data in the chunk
+   *
+   * @param invertedIndex inverted index
+   * @return reverse inverted index
+   */
+  protected void getInvertedReverseIndexV3(int[] invertedIndex, int[] invertedIndexReverse) {
+    for (int i = 0; i < invertedIndex.length; i++) {
+      invertedIndexReverse[invertedIndex[i]] = i;
+    }
   }
 }

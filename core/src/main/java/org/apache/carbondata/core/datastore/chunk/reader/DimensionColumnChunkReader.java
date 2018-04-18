@@ -59,5 +59,5 @@ public interface DimensionColumnChunkReader {
    * @throws IOException
    */
   DimensionColumnPage decodeColumnPage(DimensionRawColumnChunk dimensionRawColumnChunk,
-      int pageNumber) throws IOException, MemoryException;
+      int pageNumber, int[] invertedIndexes, int[] invertedIndexReverse) throws IOException, MemoryException;
 }

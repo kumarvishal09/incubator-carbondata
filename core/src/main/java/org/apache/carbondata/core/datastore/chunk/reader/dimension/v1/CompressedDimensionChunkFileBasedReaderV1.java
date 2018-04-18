@@ -98,12 +98,11 @@ public class CompressedDimensionChunkFileBasedReaderV1 extends AbstractChunkRead
     return rawColumnChunk;
   }
 
-  @Override public DimensionColumnPage decodeColumnPage(
-      DimensionRawColumnChunk dimensionRawColumnChunk, int pageNumber) throws IOException {
+  @Override
+  public DimensionColumnPage decodeColumnPage(DimensionRawColumnChunk dimensionRawColumnChunk,
+      int pageNumber, int[] invertedIndexes, int[] invertedIndexesReverse) throws IOException {
     int blockIndex = dimensionRawColumnChunk.getColumnIndex();
     byte[] dataPage = null;
-    int[] invertedIndexes = null;
-    int[] invertedIndexesReverse = null;
     int[] rlePage = null;
     FileReader fileReader = dimensionRawColumnChunk.getFileReader();
 

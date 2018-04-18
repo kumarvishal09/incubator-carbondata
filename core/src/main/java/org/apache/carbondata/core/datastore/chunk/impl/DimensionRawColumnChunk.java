@@ -56,7 +56,7 @@ public class DimensionRawColumnChunk extends AbstractRawColumnChunk {
     for (int i = 0; i < pagesCount; i++) {
       try {
         if (dataChunks[i] == null) {
-          dataChunks[i] = chunkReader.decodeColumnPage(this, i);
+          dataChunks[i] = chunkReader.decodeColumnPage(this, i, null, null);
         }
       } catch (IOException | MemoryException e) {
         throw new RuntimeException(e);
@@ -77,12 +77,11 @@ public class DimensionRawColumnChunk extends AbstractRawColumnChunk {
     }
     if (dataChunks[pageNumber] == null) {
       try {
-        dataChunks[pageNumber] = chunkReader.decodeColumnPage(this, pageNumber);
+        dataChunks[pageNumber] = chunkReader.decodeColumnPage(this, pageNumber, null, null);
       } catch (IOException | MemoryException e) {
         throw new RuntimeException(e);
       }
     }
-
     return dataChunks[pageNumber];
   }
 
@@ -100,7 +99,7 @@ public class DimensionRawColumnChunk extends AbstractRawColumnChunk {
       return dataChunks[index];
     }
     try {
-      return chunkReader.decodeColumnPage(this, index);
+      return chunkReader.decodeColumnPage(this, index, null, null);
     } catch (Exception e) {
       throw new RuntimeException(e);
     }
