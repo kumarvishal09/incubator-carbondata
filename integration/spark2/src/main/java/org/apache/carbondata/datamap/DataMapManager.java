@@ -29,6 +29,7 @@ import static org.apache.carbondata.core.metadata.schema.datamap.DataMapClassPro
 
 import org.apache.spark.sql.SparkSession;
 
+
 public class DataMapManager {
 
   private static DataMapManager INSTANCE;
@@ -53,9 +54,11 @@ public class DataMapManager {
     } else if (dataMapSchema.getProviderName().equalsIgnoreCase(TIMESERIES.toString())) {
       provider = new TimeseriesDataMapProvider(mainTable, dataMapSchema, sparkSession);
     } else if (dataMapSchema.getProviderName().equalsIgnoreCase(MV.toString())) {
-      provider = (DataMapProvider) CarbonScalaUtil
-          .createDataMapProvider("org.apache.carbondata.mv.datamap.MVDataMapProvider", sparkSession,
-              getDataMapSchemaStorageProvider());
+      provider = (DataMapProvider) CarbonScalaUtil.createDataMapProvider(
+          "org.apache.carbondata.mv.datamap.MVDataMapProvider",
+              sparkSession,
+              mainTable,
+              dataMapSchema);
     } else {
       provider = new IndexDataMapProvider(mainTable, dataMapSchema, sparkSession);
     }

@@ -32,6 +32,7 @@ import org.apache.spark.sql.execution.command.table.CarbonCreateTableCommand
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.parser.CarbonSpark2SqlParser
 
+import org.apache.carbondata.core.datamap.DataMapStoreManager
 import org.apache.carbondata.core.metadata.schema.table.{DataMapSchema, DataMapSchemaStorageProvider, RelationIdentifier}
 import org.apache.carbondata.mv.plans.modular
 import org.apache.carbondata.mv.plans.modular.{GroupBy, Matchable, ModularPlan, Select}
@@ -46,7 +47,6 @@ object MVHelper {
   def createMVDataMap(sparkSession: SparkSession,
       dataMapSchema: DataMapSchema,
       queryString: String,
-      storageProvider: DataMapSchemaStorageProvider,
       ifNotExistsSet: Boolean = false): Unit = {
     val dmProperties = dataMapSchema.getProperties.asScala
     val updatedQuery = new CarbonSpark2SqlParser().addPreAggFunction(queryString)
@@ -112,7 +112,7 @@ object MVHelper {
       new RelationIdentifier(table.database, table.identifier.table, "")
     }
     dataMapSchema.setParentTables(new util.ArrayList[RelationIdentifier](parentIdents.asJava))
-    storageProvider.saveSchema(dataMapSchema)
+    DataMapStoreManager.getInstance().saveDataMapSchema(dataMapSchema)
   }
 
   def updateColumnName(attr: Attribute): String = {

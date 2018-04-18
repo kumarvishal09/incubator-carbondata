@@ -26,6 +26,7 @@ import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.carbondata.common.logging.LogServiceFactory
 import org.apache.carbondata.core.datamap.DataMapStoreManager
 import org.apache.carbondata.core.metadata.schema.datamap.DataMapClassProvider
+import org.apache.carbondata.core.metadata.schema.table.DataMapSchema
 import org.apache.carbondata.datamap.DataMapManager
 import org.apache.carbondata.mv.rewrite.{SummaryDataset, SummaryDatasetCatalog}
 
@@ -36,8 +37,10 @@ import org.apache.carbondata.mv.rewrite.{SummaryDataset, SummaryDatasetCatalog}
  */
 class MVAnalyzerRule(sparkSession: SparkSession) extends Rule[LogicalPlan] {
 
+  // TODO Find way better way to get the provider.
   private val dataMapProvider =
-    DataMapManager.get().getDataMapProvider(DataMapClassProvider.MV.getShortName, sparkSession)
+    DataMapManager.get().getDataMapProvider(null,
+      new DataMapSchema("", DataMapClassProvider.MV.getShortName), sparkSession)
 
   private val LOGGER = LogServiceFactory.getLogService(classOf[MVAnalyzerRule].getName)
 

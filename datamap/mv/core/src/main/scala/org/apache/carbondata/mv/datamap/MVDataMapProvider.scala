@@ -26,58 +26,59 @@ import org.apache.spark.sql.execution.command.table.CarbonDropTableCommand
 import org.apache.spark.sql.execution.datasources.FindDataSourceTable
 import org.apache.spark.sql.parser.CarbonSpark2SqlParser
 import org.apache.spark.sql.util.SparkSQLUtil
-import org.apache.spark.util.CarbonReflectionUtils
 
 import org.apache.carbondata.common.annotations.InterfaceAudience
 import org.apache.carbondata.common.exceptions.sql.MalformedDataMapCommandException
 import org.apache.carbondata.core.datamap.{DataMapCatalog, DataMapProvider, DataMapStoreManager}
-import org.apache.carbondata.core.metadata.schema.table.{CarbonTable, DataMapSchema, DataMapSchemaStorageProvider}
+import org.apache.carbondata.core.datamap.dev.{DataMap, DataMapFactory}
+import org.apache.carbondata.core.indexstore.Blocklet
+import org.apache.carbondata.core.metadata.schema.table.{CarbonTable, DataMapSchema}
 import org.apache.carbondata.mv.rewrite.{SummaryDataset, SummaryDatasetCatalog}
 
 @InterfaceAudience.Internal
 class MVDataMapProvider(
+    mainTable: CarbonTable,
     sparkSession: SparkSession,
-    storageProvider: DataMapSchemaStorageProvider) extends DataMapProvider {
+    dataMapSchema: DataMapSchema)
+  extends DataMapProvider(mainTable, dataMapSchema) {
   protected var dropTableCommand: CarbonDropTableCommand = null
 
   @throws[MalformedDataMapCommandException]
   @throws[IOException]
-  override def initMeta(mainTable: CarbonTable,
-      dataMapSchema: DataMapSchema,
-      ctasSqlStatement: String): Unit = {
+  override def initMeta(ctasSqlStatement: String): Unit = {
     if (ctasSqlStatement == null) {
       throw new MalformedDataMapCommandException(
         "select statement is mandatory")
     }
-    MVHelper.createMVDataMap(sparkSession, dataMapSchema, ctasSqlStatement, storageProvider, true)
+    MVHelper.createMVDataMap(sparkSession, dataMapSchema, ctasSqlStatement, true)
     DataMapStoreManager.getInstance.registerDataMapCatalog(this, dataMapSchema)
   }
 
-  override def initData(mainTable: CarbonTable): Unit = {
+  override def initData(): Unit = {
   }
 
   @throws[IOException]
-  override def freeMeta(mainTable: CarbonTable, dataMapSchema: DataMapSchema): Unit = {
+  override def cleanMeta(): Unit = {
     dropTableCommand = new CarbonDropTableCommand(true,
       new Some[String](dataMapSchema.getRelationIdentifier.getDatabaseName),
       dataMapSchema.getRelationIdentifier.getTableName,
       true)
     dropTableCommand.processMetadata(sparkSession)
     DataMapStoreManager.getInstance.unRegisterDataMapCatalog(dataMapSchema)
-    storageProvider.dropSchema(dataMapSchema.getDataMapName)
+    DataMapStoreManager.getInstance().dropDataMapSchema(dataMapSchema.getDataMapName)
   }
 
-  override def freeData(mainTable: CarbonTable, dataMapSchema: DataMapSchema): Unit = {
+  override def cleanData(): Unit = {
     if (dropTableCommand != null) {
       dropTableCommand.processData(sparkSession)
     }
   }
 
   @throws[IOException]
-  override def rebuild(mainTable: CarbonTable, schema: DataMapSchema): Unit = {
-    val ctasQuery = schema.getCtasQuery
+  override def rebuild(): Unit = {
+    val ctasQuery = dataMapSchema.getCtasQuery
     if (ctasQuery != null) {
-      val identifier = schema.getRelationIdentifier
+      val identifier = dataMapSchema.getRelationIdentifier
       val logicalPlan =
         new FindDataSourceTable(sparkSession).apply(
           sparkSession.sessionState.catalog.lookupRelation(
@@ -110,12 +111,15 @@ class MVDataMapProvider(
   }
 
   @throws[IOException]
-  override def incrementalBuild(mainTable: CarbonTable,
-      schema: DataMapSchema,
+  override def incrementalBuild(
       segmentIds: Array[String]): Unit = {
     throw new UnsupportedOperationException
   }
 
   override def createDataMapCatalog : DataMapCatalog[SummaryDataset] =
     new SummaryDatasetCatalog(sparkSession)
+
+  override def getDataMapFactory: DataMapFactory[_ <: DataMap[_ <: Blocklet]] = {
+    throw new UnsupportedOperationException
+  }
 }
