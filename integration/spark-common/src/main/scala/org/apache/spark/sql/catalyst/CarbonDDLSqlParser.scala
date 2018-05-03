@@ -518,12 +518,12 @@ abstract class CarbonDDLSqlParser extends AbstractCarbonSparkSQLParser {
       noInvertedIdxColsProps =
         tableProperties.get(CarbonCommonConstants.NO_INVERTED_INDEX).get.split(',').map(_.trim)
       noInvertedIdxColsProps.foreach { noInvertedIdxColProp =>
-          if (!fields.exists(x => x.column.equalsIgnoreCase(noInvertedIdxColProp))) {
-            val errormsg = "NO_INVERTED_INDEX column: " + noInvertedIdxColProp +
-                           " does not exist in table. Please check create table statement."
-            throw new MalformedCarbonCommandException(errormsg)
-          }
+        if (!fields.exists(x => x.column.equalsIgnoreCase(noInvertedIdxColProp))) {
+          val errormsg = "NO_INVERTED_INDEX column: " + noInvertedIdxColProp +
+                         " does not exist in table. Please check create table statement."
+          throw new MalformedCarbonCommandException(errormsg)
         }
+      }
     }
     // check duplicate columns and only 1 col left
     val distinctCols = noInvertedIdxColsProps.toSet
@@ -573,7 +573,7 @@ abstract class CarbonDDLSqlParser extends AbstractCarbonSparkSQLParser {
       sortKey.foreach { column =>
         if (!fields.exists(x => x.column.equalsIgnoreCase(column))) {
           val errormsg = "sort_columns: " + column +
-            " does not exist in table. Please check create table statement."
+                         " does not exist in table. Please check create table statement."
           throw new MalformedCarbonCommandException(errormsg)
         } else {
           val dataType = fields.find(x =>
@@ -604,18 +604,13 @@ abstract class CarbonDDLSqlParser extends AbstractCarbonSparkSQLParser {
         tableProperties.get(CarbonCommonConstants.DICTIONARY_EXCLUDE).get.split(',').map(_.trim)
       dictExcludeCols
         .foreach { dictExcludeCol =>
-          if (!fields.exists(x => x.column.equalsIgnoreCase(dictExcludeCol))) {
+          if (!checkFields(fields, dictExcludeCol)) {
             val errormsg = "DICTIONARY_EXCLUDE column: " + dictExcludeCol +
                            " does not exist in table. Please check create table statement."
             throw new MalformedCarbonCommandException(errormsg)
           } else {
-            val dataType = fields.find(x =>
-              x.column.equalsIgnoreCase(dictExcludeCol)).get.dataType.get
-            if (isComplexDimDictionaryExclude(dataType)) {
-              val errormsg = "DICTIONARY_EXCLUDE is unsupported for complex datatype column: " +
-                             dictExcludeCol
-              throw new MalformedCarbonCommandException(errormsg)
-            } else if (!isDataTypeSupportedForDictionary_Exclude(dataType)) {
+            val dataType = findField(fields, dictExcludeCol).get.dataType.get
+            if (!isDataTypeSupportedForDictionary_Exclude(dataType)) {
               val errorMsg = "DICTIONARY_EXCLUDE is unsupported for " + dataType.toLowerCase() +
                              " data type column: " + dictExcludeCol
               throw new MalformedCarbonCommandException(errorMsg)
@@ -623,12 +618,37 @@ abstract class CarbonDDLSqlParser extends AbstractCarbonSparkSQLParser {
           }
         }
     }
+
+
+    def checkFields(y: Seq[Field], colToMatch: String): Boolean = {
+      y.exists { fld =>
+        if (fld.column.equalsIgnoreCase(colToMatch)) {
+          true
+        } else if (fld.children.isDefined && fld.children.get != null) {
+          checkFields(fld.children.get, colToMatch)
+        } else {
+          false
+        }
+      }
+    }
+
+    def findField(y: Seq[Field], colToMatch: String): Option[Field] = {
+      var field : Option[Field] = None
+      for (fld <- y) {
+        if (fld.column.equalsIgnoreCase(colToMatch)) {
+          field = Some(fld)
+        } else if (fld.children.isDefined && fld.children.get != null){
+          field = findField(fld.children.get, colToMatch)
+        }
+      }
+      field
+    }
     // All included cols should be there in create table cols
     if (tableProperties.get(CarbonCommonConstants.DICTIONARY_INCLUDE).isDefined) {
       dictIncludeCols =
         tableProperties(CarbonCommonConstants.DICTIONARY_INCLUDE).split(",").map(_.trim)
       dictIncludeCols.foreach { distIncludeCol =>
-        if (!fields.exists(x => x.column.equalsIgnoreCase(distIncludeCol.trim))) {
+        if (!checkFields(fields, distIncludeCol.trim)) {
           val errormsg = "DICTIONARY_INCLUDE column: " + distIncludeCol.trim +
                          " does not exist in table. Please check create table statement."
           throw new MalformedCarbonCommandException(errormsg)
@@ -668,7 +688,7 @@ abstract class CarbonDDLSqlParser extends AbstractCarbonSparkSQLParser {
                  (!field.dataType.get.equalsIgnoreCase("STRING"))) {
         throw new MalformedCarbonCommandException(s"Illegal argument in sort_column.Check if you " +
                                                   s"have included UNSUPPORTED DataType column{${
-                                                  field.column}}in sort_columns.")
+                                                    field.column}}in sort_columns.")
       } else if (sortKeyDimsTmp.exists(x => x.equalsIgnoreCase(field.column))) {
         noDictionaryDims :+= field.column
         dimFields += field
@@ -814,7 +834,7 @@ abstract class CarbonDDLSqlParser extends AbstractCarbonSparkSQLParser {
     if (remainingNodes.nonEmpty) {
       CarbonException.analysisException(
         s"""Unhandled clauses:
-            |You are likely trying to use an unsupported carbon feature."""".stripMargin)
+           |You are likely trying to use an unsupported carbon feature."""".stripMargin)
     }
     clauses
   }
@@ -963,13 +983,13 @@ abstract class CarbonDDLSqlParser extends AbstractCarbonSparkSQLParser {
       }
     }
 
-      if (options.exists(_._1.equalsIgnoreCase("SKIP_EMPTY_LINE"))) {
-        val optionValue: String = options.get("skip_empty_line").get.head._2
-        if (!("true".equalsIgnoreCase(optionValue) || "false".equalsIgnoreCase(optionValue))) {
-          throw new MalformedCarbonCommandException(
-            "option SKIP_EMPTY_LINE can have option either true or false")
-        }
+    if (options.exists(_._1.equalsIgnoreCase("SKIP_EMPTY_LINE"))) {
+      val optionValue: String = options.get("skip_empty_line").get.head._2
+      if (!("true".equalsIgnoreCase(optionValue) || "false".equalsIgnoreCase(optionValue))) {
+        throw new MalformedCarbonCommandException(
+          "option SKIP_EMPTY_LINE can have option either true or false")
       }
+    }
 
     // check for duplicate options
     val duplicateOptions = options filter {
@@ -1043,13 +1063,13 @@ abstract class CarbonDDLSqlParser extends AbstractCarbonSparkSQLParser {
    * Matching the decimal(10,0) data type and returning the same.
    */
   private lazy val decimalType =
-  DECIMAL ~ (("(" ~> numericLit <~ ",") ~ (numericLit <~ ")")).? ^^ {
-    case decimal ~ precisionAndScale => if (precisionAndScale.isDefined) {
-      s"decimal(${ precisionAndScale.get._1 }, ${ precisionAndScale.get._2 })"
-    } else {
-      s"decimal(10,0)"
+    DECIMAL ~ (("(" ~> numericLit <~ ",") ~ (numericLit <~ ")")).? ^^ {
+      case decimal ~ precisionAndScale => if (precisionAndScale.isDefined) {
+        s"decimal(${ precisionAndScale.get._1 }, ${ precisionAndScale.get._2 })"
+      } else {
+        s"decimal(10,0)"
+      }
     }
-  }
 
   protected lazy val nestedType: Parser[Field] = structFieldType | arrayFieldType |
                                                  primitiveFieldType
@@ -1104,8 +1124,8 @@ abstract class CarbonDDLSqlParser extends AbstractCarbonSparkSQLParser {
     dataType match {
       case "string" =>
         Field(field.column, Some("String"), field.name, Some(null), field.parent,
-        field.storeType, field.schemaOrdinal, field.precision, field.scale, field.rawSchema,
-        field.columnComment)
+          field.storeType, field.schemaOrdinal, field.precision, field.scale, field.rawSchema,
+          field.columnComment)
       case "smallint" =>
         Field(field.column, Some("SmallInt"), field.name, Some(null),
           field.parent, field.storeType, field.schemaOrdinal,

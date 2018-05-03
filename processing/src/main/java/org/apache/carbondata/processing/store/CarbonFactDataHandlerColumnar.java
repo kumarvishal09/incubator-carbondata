@@ -254,10 +254,15 @@ public class CarbonFactDataHandlerColumnar implements CarbonFactHandler {
     TablePage tablePage = new TablePage(model, dataRows.size());
     int rowId = 0;
 
-    // convert row to columnar data
-    for (CarbonRow row : dataRows) {
-      tablePage.addRow(rowId++, row);
+    try {
+      // convert row to columnar data
+      for (CarbonRow row : dataRows) {
+        tablePage.addRow(rowId++, row);
+      }
+    } catch (Exception e) {
+      System.out.println();
     }
+
 
     tablePage.encode();
 

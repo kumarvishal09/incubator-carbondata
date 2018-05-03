@@ -336,8 +336,10 @@ public class PrimitiveDataType implements GenericDataType<Object> {
 
   private void updateNullValue(DataOutputStream dataOutputStream) throws IOException {
     if (this.carbonDimension.getDataType() == DataTypes.STRING) {
+      dataOutputStream.writeInt(CarbonCommonConstants.MEMBER_DEFAULT_VAL_ARRAY.length);
       dataOutputStream.write(CarbonCommonConstants.MEMBER_DEFAULT_VAL_ARRAY);
     } else {
+      dataOutputStream.writeInt(CarbonCommonConstants.EMPTY_BYTE_ARRAY.length);
       dataOutputStream.write(CarbonCommonConstants.EMPTY_BYTE_ARRAY);
     }
   }

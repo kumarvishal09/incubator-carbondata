@@ -43,9 +43,7 @@ class TestComplexTypeQuery extends QueryTest with BeforeAndAfterAll {
       "array<string>, locationinfo array<struct<ActiveAreaId:int, ActiveCountry:string, " +
       "ActiveProvince:string, Activecity:string, ActiveDistrict:string, ActiveStreet:string>>, " +
       "proddate struct<productionDate:string,activeDeactivedate:array<string>>, gamePointId " +
-      "double,contractNumber double)  STORED BY 'org.apache.carbondata.format'  TBLPROPERTIES " +
-      "('DICTIONARY_INCLUDE'='deviceInformationId', 'DICTIONARY_EXCLUDE'='channelsId'," +
-      "'COLUMN_GROUP'='(ROMSize,ROMName)')")
+      "double,contractNumber double)  STORED BY 'org.apache.carbondata.format'")
     sql("LOAD DATA local inpath '" + resourcesPath +
         "/complextypesample.csv' INTO table complexcarbontable  OPTIONS('DELIMITER'=',', " +
         "'QUOTECHAR'='\"', 'FILEHEADER'='deviceInformationId,channelsId,ROMSize,ROMName," +

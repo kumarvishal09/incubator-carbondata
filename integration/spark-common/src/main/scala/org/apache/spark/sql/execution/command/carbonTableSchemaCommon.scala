@@ -32,7 +32,7 @@ import org.apache.carbondata.core.constants.CarbonCommonConstants
 import org.apache.carbondata.core.datamap.Segment
 import org.apache.carbondata.core.indexstore.PartitionSpec
 import org.apache.carbondata.core.metadata.AbsoluteTableIdentifier
-import org.apache.carbondata.core.metadata.datatype.{DataType, DataTypes, DecimalType}
+import org.apache.carbondata.core.metadata.datatype.{ArrayType, DataType, DataTypes, DecimalType, StructType}
 import org.apache.carbondata.core.metadata.encoder.Encoding
 import org.apache.carbondata.core.metadata.schema._
 import org.apache.carbondata.core.metadata.schema.table.{CarbonTable, RelationIdentifier, TableInfo, TableSchema}
@@ -391,7 +391,6 @@ class TableNewProcessor(cm: TableModel) {
     fieldChildren.foreach(fields => {
       fields.foreach(field => {
         val encoders = new java.util.ArrayList[Encoding]()
-        encoders.add(Encoding.DICTIONARY)
         val columnSchema: ColumnSchema = getColumnSchema(
           DataTypeConverterUtil.convertToCarbonType(field.dataType.getOrElse("")),
           field.name.getOrElse(field.column),
@@ -431,6 +430,10 @@ class TableNewProcessor(cm: TableModel) {
     if (dataType == DataTypes.TIMESTAMP && !highCardinalityDims.contains(colName)) {
         encoders.add(Encoding.DIRECT_DICTIONARY)
       }
+    }
+    if(dataType.isInstanceOf[StructType] || dataType.isInstanceOf[ArrayType]) {
+      encoders.remove(Encoding.DIRECT_DICTIONARY)
+      encoders.remove(Encoding.DICTIONARY)
     }
     columnSchema.setEncodingList(encoders)
     val colUniqueIdGenerator = ColumnUniqueIdGenerator.getInstance
