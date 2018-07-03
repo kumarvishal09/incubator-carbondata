@@ -1841,18 +1841,18 @@ public final class FilterUtil {
     }
   }
 
-  public static byte[][] getEncodedFilterValues(byte[][] dictionaryValues, byte[][] actualFilterValues) {
-    if(null == dictionaryValues){
+  public static byte[][] getEncodedFilterValues(byte[][] dictionaryValues,
+      byte[][] actualFilterValues) {
+    if (null == dictionaryValues) {
       return actualFilterValues;
     }
     KeyGenerator keyGenerator = KeyGeneratorFactory.getKeyGenerator(new int[] { 100000 });
-    List<byte[]> encodedFilters= new ArrayList<>();
-    for (byte[] actualFilter:actualFilterValues) {
-      for(int i = 0; i<dictionaryValues.length;i++) {
-
-        if(ByteUtil.UnsafeComparer.INSTANCE.compareTo(actualFilter, dictionaryValues[i])==0) {
+    List<byte[]> encodedFilters = new ArrayList<>();
+    for (byte[] actualFilter : actualFilterValues) {
+      for (int i = 1; i < dictionaryValues.length; i++) {
+        if (ByteUtil.UnsafeComparer.INSTANCE.compareTo(actualFilter, dictionaryValues[i]) == 0) {
           try {
-            encodedFilters.add(keyGenerator.generateKey(new int[]{i}));
+            encodedFilters.add(keyGenerator.generateKey(new int[] { i }));
           } catch (KeyGenException e) {
             //do nothing
           }
@@ -1860,7 +1860,10 @@ public final class FilterUtil {
         }
       }
     }
+    return getSortedEncodedFilters(encodedFilters);
+  }
 
+  private static byte[][] getSortedEncodedFilters(List<byte[]> encodedFilters) {
     java.util.Comparator<byte[]> filterNoDictValueComaparator = new java.util.Comparator<byte[]>() {
       @Override public int compare(byte[] filterMember1, byte[] filterMember2) {
         return ByteUtil.UnsafeComparer.INSTANCE.compareTo(filterMember1, filterMember2);
@@ -1870,25 +1873,24 @@ public final class FilterUtil {
     return encodedFilters.toArray(new byte[encodedFilters.size()][]);
   }
 
-  private static void prepareFilterMembers(Expression expression,
+  public static byte[][] prepareFilterMembers(Expression expression,
       final ColumnExpression columnExpression, byte[][] dictionaryValues)
       throws FilterUnsupportedException {
-    int surrogateCount = 0;
-    KeyGenerator keyGenerator = KeyGeneratorFactory.getKeyGenerator(new int[] { 100000 });
+    KeyGenerator keyGenerator = KeyGeneratorFactory
+        .getKeyGenerator(new int[] { CarbonCommonConstants.LOCAL_DICTIONARY_MAX });
     List<byte[]> filterValues = new ArrayList<>();
-    for (byte[] columnVal : dictionaryValues) {
-      ++surrogateCount;
+    for (int i = 2; i < dictionaryValues.length; i++) {
       try {
         RowIntf row = new RowImpl();
         String stringValue =
-            new String(columnVal, Charset.forName(CarbonCommonConstants.DEFAULT_CHARSET));
+            new String(dictionaryValues[i], Charset.forName(CarbonCommonConstants.DEFAULT_CHARSET));
         row.setValues(new Object[] { DataTypeUtil.getDataBasedOnDataType(stringValue,
             columnExpression.getCarbonColumn().getDataType()) });
         Boolean rslt = expression.evaluate(row).getBoolean();
         if (null != rslt) {
           if (rslt) {
             try {
-              filterValues.add(keyGenerator.generateKey(new int[] { surrogateCount }));
+              filterValues.add(keyGenerator.generateKey(new int[] { i }));
             } catch (KeyGenException e) {
               //do nothing
             }
@@ -1898,5 +1900,6 @@ public final class FilterUtil {
         LOGGER.debug(e.getMessage());
       }
     }
+    return getSortedEncodedFilters(filterValues);
   }
 }

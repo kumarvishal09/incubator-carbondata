@@ -241,7 +241,7 @@ public class CompressedDimensionChunkFileBasedReaderV3 extends AbstractChunkRead
         rawColumnPage
             .setLocalDictionary(getDictionary(rawColumnPage.getDataChunkV3().local_dictionary));
       }
-      return new ColumnPageWrapper(decodedPage);
+      return new ColumnPageWrapper(decodedPage, rawColumnPage.getLocalDictionary());
     } else {
       // following code is for backward compatibility
       return decodeDimensionLegacy(rawColumnPage, pageData, pageMetadata, offset);
