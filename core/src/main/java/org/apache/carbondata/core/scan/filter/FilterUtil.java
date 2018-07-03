@@ -1869,4 +1869,34 @@ public final class FilterUtil {
     Collections.sort(encodedFilters, filterNoDictValueComaparator);
     return encodedFilters.toArray(new byte[encodedFilters.size()][]);
   }
+
+  private static void prepareFilterMembers(Expression expression,
+      final ColumnExpression columnExpression, byte[][] dictionaryValues)
+      throws FilterUnsupportedException {
+    int surrogateCount = 0;
+    KeyGenerator keyGenerator = KeyGeneratorFactory.getKeyGenerator(new int[] { 100000 });
+    List<byte[]> filterValues = new ArrayList<>();
+    for (byte[] columnVal : dictionaryValues) {
+      ++surrogateCount;
+      try {
+        RowIntf row = new RowImpl();
+        String stringValue =
+            new String(columnVal, Charset.forName(CarbonCommonConstants.DEFAULT_CHARSET));
+        row.setValues(new Object[] { DataTypeUtil.getDataBasedOnDataType(stringValue,
+            columnExpression.getCarbonColumn().getDataType()) });
+        Boolean rslt = expression.evaluate(row).getBoolean();
+        if (null != rslt) {
+          if (rslt) {
+            try {
+              filterValues.add(keyGenerator.generateKey(new int[] { surrogateCount }));
+            } catch (KeyGenException e) {
+              //do nothing
+            }
+          }
+        }
+      } catch (FilterIllegalMemberException e) {
+        LOGGER.debug(e.getMessage());
+      }
+    }
+  }
 }
