@@ -22,17 +22,27 @@ import java.io.DataOutputStream;
 import java.io.IOException;
 
 import org.apache.carbondata.core.constants.CarbonCommonConstants;
-import org.apache.carbondata.core.datastore.columnar.IndexStorage;
+import org.apache.carbondata.core.datastore.TableSpec;
+import org.apache.carbondata.core.datastore.columnar.PageIndexGenerator;
 import org.apache.carbondata.core.datastore.page.ColumnPage;
 import org.apache.carbondata.core.datastore.page.encoding.ColumnPageEncoder;
 import org.apache.carbondata.core.datastore.page.encoding.ColumnPageEncoderMeta;
+import org.apache.carbondata.core.datastore.page.encoding.DefaultEncodingFactory;
+import org.apache.carbondata.core.datastore.page.encoding.EncodedColumnPage;
 import org.apache.carbondata.core.memory.MemoryException;
+import org.apache.carbondata.core.metadata.datatype.DataTypes;
 import org.apache.carbondata.format.DataChunk2;
+import org.apache.carbondata.format.Encoding;
 import org.apache.carbondata.format.SortState;
 
 public abstract class IndexStorageEncoder extends ColumnPageEncoder {
-  IndexStorage indexStorage;
+  PageIndexGenerator pageIndexGenerator;
   byte[] compressedDataPage;
+  private EncodedColumnPage lengthEncodedPage;
+  private boolean storeOffset;
+  IndexStorageEncoder(boolean storeOffset) {
+    this.storeOffset = storeOffset;
+  }
 
   abstract void encodeIndexStorage(ColumnPage inputPage);
 
@@ -42,24 +52,33 @@ public abstract class IndexStorageEncoder extends ColumnPageEncoder {
     ByteArrayOutputStream stream = new ByteArrayOutputStream();
     DataOutputStream out = new DataOutputStream(stream);
     out.write(compressedDataPage);
-    if (indexStorage.getRowIdPageLengthInBytes() > 0) {
-      out.writeInt(indexStorage.getRowIdPageLengthInBytes());
-      short[] rowIdPage = (short[])indexStorage.getRowIdPage();
+    if (pageIndexGenerator.getRowIdPageLengthInBytes() > 0) {
+      out.writeInt(pageIndexGenerator.getRowIdPageLengthInBytes());
+      short[] rowIdPage = pageIndexGenerator.getRowIdPage();
       for (short rowId : rowIdPage) {
         out.writeShort(rowId);
       }
-      if (indexStorage.getRowIdRlePageLengthInBytes() > 0) {
-        short[] rowIdRlePage = (short[])indexStorage.getRowIdRlePage();
+      if (pageIndexGenerator.getRowIdRlePageLengthInBytes() > 0) {
+        short[] rowIdRlePage = pageIndexGenerator.getRowIdRlePage();
         for (short rowIdRle : rowIdRlePage) {
           out.writeShort(rowIdRle);
         }
       }
     }
-    if (indexStorage.getDataRlePageLengthInBytes() > 0) {
-      short[] dataRlePage = (short[])indexStorage.getDataRlePage();
+    if (pageIndexGenerator.getDataRlePageLengthInBytes() > 0) {
+      short[] dataRlePage = pageIndexGenerator.getDataRlePage();
       for (short dataRle : dataRlePage) {
         out.writeShort(dataRle);
       }
+    }
+    if(this.storeOffset) {
+      ColumnPage lengthPage = getLengthPage(pageIndexGenerator.getLength(),
+          (TableSpec.MeasureSpec) input.getRowOffsetPage().getColumnSpec());
+      ColumnPageEncoder encoder =
+          DefaultEncodingFactory.getInstance().createEncoder(lengthPage.getColumnSpec(), lengthPage);
+      this.lengthEncodedPage = encoder.encode(lengthPage);
+      out.write(this.lengthEncodedPage.getEncodedData().array());
+      lengthPage.freeMemory();
     }
     return stream.toByteArray();
   }
@@ -72,18 +91,32 @@ public abstract class IndexStorageEncoder extends ColumnPageEncoder {
   @Override
   protected void fillLegacyFields(DataChunk2 dataChunk)
       throws IOException {
-    SortState sort = (indexStorage.getRowIdPageLengthInBytes() > 0) ?
+    SortState sort = (pageIndexGenerator.getRowIdPageLengthInBytes() > 0) ?
         SortState.SORT_EXPLICIT : SortState.SORT_NATIVE;
     dataChunk.setSort_state(sort);
-    if (indexStorage.getRowIdPageLengthInBytes() > 0) {
+    if (pageIndexGenerator.getRowIdPageLengthInBytes() > 0) {
       int rowIdPageLength = CarbonCommonConstants.INT_SIZE_IN_BYTE +
-          indexStorage.getRowIdPageLengthInBytes() +
-          indexStorage.getRowIdRlePageLengthInBytes();
+          pageIndexGenerator.getRowIdPageLengthInBytes() +
+          pageIndexGenerator.getRowIdRlePageLengthInBytes();
       dataChunk.setRowid_page_length(rowIdPageLength);
     }
-    if (indexStorage.getDataRlePageLengthInBytes() > 0) {
-      dataChunk.setRle_page_length(indexStorage.getDataRlePageLengthInBytes());
+    if (pageIndexGenerator.getDataRlePageLengthInBytes() > 0) {
+      dataChunk.setRle_page_length(pageIndexGenerator.getDataRlePageLengthInBytes());
     }
     dataChunk.setData_page_length(compressedDataPage.length);
+    if(this.storeOffset) {
+      dataChunk.setEncoder_meta(lengthEncodedPage.getPageMetadata().encoder_meta);
+      dataChunk.getEncoders().addAll(lengthEncodedPage.getPageMetadata().getEncoders());
+      dataChunk.getEncoders().add(Encoding.INVERTED_INDEX);
+    }
+  }
+  
+  private ColumnPage getLengthPage(int[] length, TableSpec.MeasureSpec columnSpec) throws MemoryException {
+    ColumnPage lengthPage =
+        ColumnPage.newPage(columnSpec, DataTypes.INT, length.length);
+    for (int i = 0; i < length.length ; i++) {
+      lengthPage.putInt(i, length[0]);
+    }
+    return lengthPage;
   }
 }

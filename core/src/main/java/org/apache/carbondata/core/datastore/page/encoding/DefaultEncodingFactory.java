@@ -19,6 +19,7 @@ package org.apache.carbondata.core.datastore.page.encoding;
 
 import java.math.BigDecimal;
 
+import org.apache.carbondata.core.datastore.ColumnType;
 import org.apache.carbondata.core.datastore.TableSpec;
 import org.apache.carbondata.core.datastore.compression.Compressor;
 import org.apache.carbondata.core.datastore.compression.CompressorFactory;
@@ -29,9 +30,6 @@ import org.apache.carbondata.core.datastore.page.encoding.adaptive.AdaptiveDelta
 import org.apache.carbondata.core.datastore.page.encoding.adaptive.AdaptiveFloatingCodec;
 import org.apache.carbondata.core.datastore.page.encoding.adaptive.AdaptiveIntegralCodec;
 import org.apache.carbondata.core.datastore.page.encoding.compress.DirectCompressCodec;
-import org.apache.carbondata.core.datastore.page.encoding.dimension.legacy.ComplexDimensionIndexCodec;
-import org.apache.carbondata.core.datastore.page.encoding.dimension.legacy.DictDimensionIndexCodec;
-import org.apache.carbondata.core.datastore.page.encoding.dimension.legacy.DirectDictDimensionIndexCodec;
 import org.apache.carbondata.core.datastore.page.encoding.dimension.legacy.HighCardDictDimensionIndexCodec;
 import org.apache.carbondata.core.datastore.page.statistics.PrimitivePageStatsCollector;
 import org.apache.carbondata.core.datastore.page.statistics.SimpleStatsResult;
@@ -59,31 +57,12 @@ public class DefaultEncodingFactory extends EncodingFactory {
   @Override
   public ColumnPageEncoder createEncoder(TableSpec.ColumnSpec columnSpec, ColumnPage inputPage) {
     // TODO: add log
-    if (columnSpec instanceof TableSpec.MeasureSpec) {
+    if (columnSpec instanceof TableSpec.MeasureSpec
+        || columnSpec.getColumnType() == ColumnType.MEASURE) {
       return createEncoderForMeasure(inputPage);
     } else {
-      if (newWay) {
-        return createEncoderForDimension((TableSpec.DimensionSpec) columnSpec, inputPage);
-      } else {
         assert columnSpec instanceof TableSpec.DimensionSpec;
         return createEncoderForDimensionLegacy((TableSpec.DimensionSpec) columnSpec);
-      }
-    }
-  }
-
-  private ColumnPageEncoder createEncoderForDimension(TableSpec.DimensionSpec columnSpec,
-      ColumnPage inputPage) {
-    Compressor compressor = CompressorFactory.getInstance().getCompressor();
-    switch (columnSpec.getColumnType()) {
-      case GLOBAL_DICTIONARY:
-      case DIRECT_DICTIONARY:
-      case PLAIN_VALUE:
-        return new DirectCompressCodec(inputPage.getDataType()).createEncoder(null);
-      case COMPLEX:
-        return new ComplexDimensionIndexCodec(false, false, compressor).createEncoder(null);
-      default:
-        throw new RuntimeException("unsupported dimension type: " +
-            columnSpec.getColumnType());
     }
   }
 

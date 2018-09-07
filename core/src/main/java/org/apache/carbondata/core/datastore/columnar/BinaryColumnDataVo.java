@@ -21,14 +21,17 @@ import java.util.Arrays;
 
 import org.apache.carbondata.core.util.ByteUtil;
 
-public class ColumnWithRowId<T> implements Comparable<ColumnWithRowId<T>> {
+public class BinaryColumnDataVo implements Comparable<BinaryColumnDataVo> {
+  private final int length;
+
   protected byte[] column;
 
-  private T index;
+  private short index;
 
-  ColumnWithRowId(byte[] column, T index) {
+  BinaryColumnDataVo(byte[] column, short index, int length) {
     this.column = column;
     this.index = index;
+    this.length = length;
   }
 
   /**
@@ -41,11 +44,15 @@ public class ColumnWithRowId<T> implements Comparable<ColumnWithRowId<T>> {
   /**
    * @return the index
    */
-  public T getIndex() {
+  public short getIndex() {
     return index;
   }
 
-  @Override public int compareTo(ColumnWithRowId o) {
+  public int getLength() {
+    return length;
+  }
+
+  @Override public int compareTo(BinaryColumnDataVo o) {
     return ByteUtil.UnsafeComparer.INSTANCE.compareTo(column, o.column);
   }
 
@@ -53,11 +60,11 @@ public class ColumnWithRowId<T> implements Comparable<ColumnWithRowId<T>> {
     if (obj == null || getClass() != obj.getClass()) {
       return false;
     }
-    ColumnWithRowId o = (ColumnWithRowId)obj;
+    BinaryColumnDataVo o = (BinaryColumnDataVo)obj;
     return Arrays.equals(column, o.column) && index == o.index;
   }
 
   @Override public int hashCode() {
-    return Arrays.hashCode(column) + index.hashCode();
+    return Arrays.hashCode(column) + new Integer(index).hashCode();
   }
 }

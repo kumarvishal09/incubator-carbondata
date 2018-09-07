@@ -39,8 +39,7 @@ import org.apache.carbondata.core.datastore.page.encoding.EncodedColumnPage;
 import org.apache.carbondata.core.datastore.page.encoding.EncodingFactory;
 import org.apache.carbondata.core.datastore.page.key.TablePageKey;
 import org.apache.carbondata.core.datastore.page.statistics.KeyPageStatsCollector;
-import org.apache.carbondata.core.datastore.page.statistics.LVLongStringStatsCollector;
-import org.apache.carbondata.core.datastore.page.statistics.LVShortStringStatsCollector;
+import org.apache.carbondata.core.datastore.page.statistics.LVStringStatsCollector;
 import org.apache.carbondata.core.datastore.page.statistics.PrimitivePageStatsCollector;
 import org.apache.carbondata.core.datastore.row.CarbonRow;
 import org.apache.carbondata.core.datastore.row.ComplexColumnInfo;
@@ -115,15 +114,11 @@ public class TablePage {
         }
         if (null != localDictionaryGenerator) {
           page = ColumnPage
-              .newLocalDictPage(spec, dataType, pageSize, localDictionaryGenerator, false);
+              .newLocalDictPage(spec, dataType, pageSize, localDictionaryGenerator);
         } else {
           page = ColumnPage.newPage(spec, dataType, pageSize);
         }
-        if (DataTypes.VARCHAR == dataType) {
-          page.setStatsCollector(LVLongStringStatsCollector.newInstance());
-        } else {
-          page.setStatsCollector(LVShortStringStatsCollector.newInstance());
-        }
+        page.setStatsCollector(new LVStringStatsCollector());
         noDictDimensionPages[tmpNumNoDictDimIdx++] = page;
       }
     }
@@ -190,13 +185,9 @@ public class TablePage {
       for (int i = 0; i < noDictAndComplex.length; i++) {
         if (tableSpec.getDimensionSpec(dictDimensionPages.length + i).getSchemaDataType()
             == DataTypes.VARCHAR) {
-          byte[] valueWithLength = addIntLengthToByteArray(noDictAndComplex[i]);
-          noDictDimensionPages[i].putData(rowId, valueWithLength);
+          noDictDimensionPages[i].putData(rowId, noDictAndComplex[i]);
         } else if (i < noDictionaryCount) {
-          // noDictionary columns, since it is variable length, we need to prepare each
-          // element as LV result byte array (first two bytes are the length of the array)
-          byte[] valueWithLength = addShortLengthToByteArray(noDictAndComplex[i]);
-          noDictDimensionPages[i].putData(rowId, valueWithLength);
+          noDictDimensionPages[i].putData(rowId, noDictAndComplex[i]);
         } else {
           // complex columns
           addComplexColumn(i - noDictionaryCount, rowId, noDictAndComplex[i]);
@@ -300,15 +291,6 @@ public class TablePage {
     byte[] output = new byte[input.length + 2];
     ByteBuffer buffer = ByteBuffer.wrap(output);
     buffer.putShort((short)input.length);
-    buffer.put(input, 0, input.length);
-    return output;
-  }
-
-  // Adds length as a integer element (first 4 bytes) to the head of the input byte array
-  private byte[] addIntLengthToByteArray(byte[] input) {
-    byte[] output = new byte[input.length + 4];
-    ByteBuffer buffer = ByteBuffer.wrap(output);
-    buffer.putInt(input.length);
     buffer.put(input, 0, input.length);
     return output;
   }

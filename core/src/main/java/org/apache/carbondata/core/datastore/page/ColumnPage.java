@@ -163,17 +163,16 @@ public abstract class ColumnPage {
   }
 
   public static ColumnPage newLocalDictPage(TableSpec.ColumnSpec columnSpec, DataType dataType,
-      int pageSize, LocalDictionaryGenerator localDictionaryGenerator,
-      boolean isComplexTypePrimitive) throws MemoryException {
+      int pageSize, LocalDictionaryGenerator localDictionaryGenerator) throws MemoryException {
     if (unsafe) {
       return new LocalDictColumnPage(new UnsafeVarLengthColumnPage(columnSpec, dataType, pageSize),
           new UnsafeFixLengthColumnPage(columnSpec, DataTypes.BYTE_ARRAY, pageSize,
               CarbonCommonConstants.LOCAL_DICT_ENCODED_BYTEARRAY_SIZE),
-          localDictionaryGenerator, isComplexTypePrimitive);
+          localDictionaryGenerator);
     } else {
       return new LocalDictColumnPage(new SafeVarLengthColumnPage(columnSpec, dataType, pageSize),
           new SafeFixLengthColumnPage(columnSpec, DataTypes.BYTE_ARRAY, pageSize),
-          localDictionaryGenerator, isComplexTypePrimitive);
+          localDictionaryGenerator);
     }
   }
 
@@ -843,5 +842,51 @@ public abstract class ColumnPage {
 
   public int getActualRowCount() {
     throw new UnsupportedOperationException("Operation not supported");
+  }
+
+  public ColumnPage getRowOffsetPage() {
+    throw new UnsupportedOperationException("Operation not supported");
+  }
+
+  /**
+   * Convert the data of the page based on the data type for each row
+   * While preparing the inverted index for the page,
+   * we need the data based on data type for no dict measure column if adaptive encoding is applied
+   * This is similar to page.getByteArrayPage()
+   *
+   * @return
+   */
+  public Object[] getPageBasedOnDataType() {
+    Object[] data = new Object[getActualRowCount()];
+    if (dataType == DataTypes.BYTE || dataType == DataTypes.BOOLEAN) {
+      for (int i = 0; i < getActualRowCount(); i++) {
+        data[i] = getByte(i);
+      }
+    } else if (dataType == DataTypes.SHORT) {
+      for (int i = 0; i < getActualRowCount(); i++) {
+        data[i] = getShort(i);
+      }
+    } else if (dataType == DataTypes.SHORT_INT) {
+      for (int i = 0; i < getActualRowCount(); i++) {
+        data[i] = getShortInt(i);
+      }
+    } else if (dataType == DataTypes.INT) {
+      for (int i = 0; i < getActualRowCount(); i++) {
+        data[i] = getInt(i);
+      }
+    } else if (dataType == DataTypes.LONG) {
+      for (int i = 0; i < getActualRowCount(); i++) {
+        data[i] = getLong(i);
+      }
+    } else if (dataType == DataTypes.FLOAT) {
+      for (int i = 0; i < getActualRowCount(); i++) {
+        data[i] = getFloat(i);
+      }
+    } else if (dataType == DataTypes.DOUBLE) {
+      for (int i = 0; i < getActualRowCount(); i++) {
+        data[i] = getDouble(i);
+      }
+    }
+    return data;
   }
 }

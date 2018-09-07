@@ -474,4 +474,8 @@ public abstract class VarLengthColumnPageBase extends ColumnPage {
       rowOffset = null;
     }
   }
+
+  public ColumnPage getRowOffsetPage() {
+    return rowOffset;
+  }
 }

@@ -21,9 +21,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
-import org.apache.carbondata.core.datastore.columnar.BlockIndexerStorageForNoInvertedIndexForShort;
-import org.apache.carbondata.core.datastore.columnar.BlockIndexerStorageForShort;
-import org.apache.carbondata.core.datastore.columnar.IndexStorage;
+import org.apache.carbondata.core.datastore.columnar.BinaryPageIndexGenerator;
+import org.apache.carbondata.core.datastore.columnar.PageIndexGenerator;
 import org.apache.carbondata.core.datastore.compression.Compressor;
 import org.apache.carbondata.core.datastore.page.ColumnPage;
 import org.apache.carbondata.core.datastore.page.encoding.ColumnPageEncoder;
@@ -49,22 +48,22 @@ public class HighCardDictDimensionIndexCodec extends IndexStorageCodec {
 
   @Override
   public ColumnPageEncoder createEncoder(Map<String, String> parameter) {
-    return new IndexStorageEncoder() {
+    return new IndexStorageEncoder(true) {
 
       @Override
       protected void encodeIndexStorage(ColumnPage input) {
-        IndexStorage indexStorage;
+        PageIndexGenerator<byte[][]> pageIndexGenerator;
         byte[][] data = input.getByteArrayPage();
-        boolean isDictionary = input.isLocalDictGeneratedPage();
-        if (isInvertedIndex) {
-          indexStorage = new BlockIndexerStorageForShort(data, isDictionary, !isDictionary, isSort);
-        } else {
-          indexStorage =
-              new BlockIndexerStorageForNoInvertedIndexForShort(data, isDictionary);
+        int[] intPage = input.getRowOffsetPage().getIntPage();
+        int[] length = new int[intPage.length -1];
+        for (int i = 0; i < intPage.length -1 ; i++) {
+          length[i] =  intPage[i + 1] - intPage[i];
         }
-        byte[] flattened = ByteUtil.flatten(indexStorage.getDataPage());
+        pageIndexGenerator =
+              new BinaryPageIndexGenerator(data, isSort, length);
+        byte[] flattened = ByteUtil.flatten(pageIndexGenerator.getDataPage());
         super.compressedDataPage = compressor.compressByte(flattened);
-        super.indexStorage = indexStorage;
+        super.pageIndexGenerator = pageIndexGenerator;
       }
 
       @Override
@@ -72,10 +71,10 @@ public class HighCardDictDimensionIndexCodec extends IndexStorageCodec {
         List<Encoding> encodings = new ArrayList<>();
         if (isVarcharType) {
           encodings.add(Encoding.DIRECT_COMPRESS_VARCHAR);
-        } else if (indexStorage.getRowIdPageLengthInBytes() > 0) {
+        } else if (pageIndexGenerator.getRowIdPageLengthInBytes() > 0) {
           encodings.add(Encoding.INVERTED_INDEX);
         }
-        if (indexStorage.getDataRlePageLengthInBytes() > 0) {
+        if (pageIndexGenerator.getDataRlePageLengthInBytes() > 0) {
           encodings.add(Encoding.RLE);
         }
         return encodings;

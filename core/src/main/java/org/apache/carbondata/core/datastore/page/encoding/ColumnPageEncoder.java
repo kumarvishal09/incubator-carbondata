@@ -162,8 +162,14 @@ public abstract class ColumnPageEncoder {
       throws IOException, MemoryException {
     ColumnPageEncoder pageEncoder = createCodecForDimension(page);
     if (pageEncoder == null) {
-      ColumnPageEncoder encoder = new DirectCompressCodec(DataTypes.BYTE_ARRAY).createEncoder(null);
-      return encoder.encode(page);
+      if (page.getColumnSpec().getColumnType() == ColumnType.COMPLEX_PRIMITIVE) {
+        return DefaultEncodingFactory.getInstance().createEncoder(page.getColumnSpec(), page)
+            .encode(page);
+      } else {
+        ColumnPageEncoder encoder =
+            new DirectCompressCodec(DataTypes.BYTE_ARRAY).createEncoder(null);
+        return encoder.encode(page);
+      }
     } else {
       LOGGER.debug("Encoder result ---> Source data type: " + pageEncoder.getEncoderMeta(page)
           .getColumnSpec().getSchemaDataType() + " Destination data type: " + pageEncoder
