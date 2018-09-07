@@ -22,6 +22,7 @@ import org.apache.carbondata.core.constants.CarbonCommonConstants;
 import org.apache.carbondata.core.datastore.ColumnType;
 import org.apache.carbondata.core.datastore.chunk.DimensionColumnPage;
 import org.apache.carbondata.core.datastore.page.ColumnPage;
+import org.apache.carbondata.core.metadata.blocklet.PresenceMeta;
 import org.apache.carbondata.core.metadata.datatype.DataType;
 import org.apache.carbondata.core.metadata.datatype.DataTypes;
 import org.apache.carbondata.core.scan.result.vector.CarbonDictionary;
@@ -43,7 +44,6 @@ public class ColumnPageWrapper implements DimensionColumnPage {
     this.columnPage = columnPage;
     this.localDictionary = localDictionary;
     this.isAdaptiveComplexPrimitivePage = isAdaptiveComplexPrimitivePage;
-
   }
 
   @Override
@@ -157,7 +157,7 @@ public class ColumnPageWrapper implements DimensionColumnPage {
   }
 
   @Override
-  public int compareTo(int rowId, byte[] compareValue) {
+  public int compareTo(int rowId, Object compareValue) {
     throw new UnsupportedOperationException("internal error");
   }
 
@@ -169,8 +169,15 @@ public class ColumnPageWrapper implements DimensionColumnPage {
     }
   }
 
-  public boolean isAdaptiveComplexPrimitive() {
+  @Override public boolean isAdaptiveEncoded() {
     return isAdaptiveComplexPrimitivePage;
   }
 
+  @Override public PresenceMeta getPresentMeta() {
+    return null;
+  }
+
+  public boolean isAdaptiveComplexPrimitive() {
+    return isAdaptiveComplexPrimitivePage;
+  }
 }

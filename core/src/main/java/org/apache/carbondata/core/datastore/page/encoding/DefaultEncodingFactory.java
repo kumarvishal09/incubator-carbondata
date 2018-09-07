@@ -18,7 +18,9 @@
 package org.apache.carbondata.core.datastore.page.encoding;
 
 import java.math.BigDecimal;
+import java.util.Map;
 
+import org.apache.carbondata.core.datastore.ColumnType;
 import org.apache.carbondata.core.datastore.TableSpec;
 import org.apache.carbondata.core.datastore.compression.Compressor;
 import org.apache.carbondata.core.datastore.compression.CompressorFactory;
@@ -29,15 +31,14 @@ import org.apache.carbondata.core.datastore.page.encoding.adaptive.AdaptiveDelta
 import org.apache.carbondata.core.datastore.page.encoding.adaptive.AdaptiveFloatingCodec;
 import org.apache.carbondata.core.datastore.page.encoding.adaptive.AdaptiveIntegralCodec;
 import org.apache.carbondata.core.datastore.page.encoding.compress.DirectCompressCodec;
-import org.apache.carbondata.core.datastore.page.encoding.dimension.legacy.ComplexDimensionIndexCodec;
-import org.apache.carbondata.core.datastore.page.encoding.dimension.legacy.DictDimensionIndexCodec;
-import org.apache.carbondata.core.datastore.page.encoding.dimension.legacy.DirectDictDimensionIndexCodec;
 import org.apache.carbondata.core.datastore.page.encoding.dimension.legacy.HighCardDictDimensionIndexCodec;
+import org.apache.carbondata.core.datastore.page.encoding.dimension.legacy.PrimitiveTypeColumnCodec;
 import org.apache.carbondata.core.datastore.page.statistics.PrimitivePageStatsCollector;
 import org.apache.carbondata.core.datastore.page.statistics.SimpleStatsResult;
 import org.apache.carbondata.core.metadata.datatype.DataType;
 import org.apache.carbondata.core.metadata.datatype.DataTypes;
 import org.apache.carbondata.core.metadata.datatype.DecimalConverterFactory;
+import org.apache.carbondata.format.Encoding;
 
 /**
  * Default factory will select encoding base on column page data type and statistics
@@ -47,8 +48,6 @@ public class DefaultEncodingFactory extends EncodingFactory {
   private static final int THREE_BYTES_MAX = (int) Math.pow(2, 23) - 1;
   private static final int THREE_BYTES_MIN = - THREE_BYTES_MAX - 1;
 
-  private static final boolean newWay = false;
-
   private static EncodingFactory encodingFactory = new DefaultEncodingFactory();
 
   public static EncodingFactory getInstance() {
@@ -57,55 +56,43 @@ public class DefaultEncodingFactory extends EncodingFactory {
   }
 
   @Override
-  public ColumnPageEncoder createEncoder(TableSpec.ColumnSpec columnSpec, ColumnPage inputPage) {
+  public ColumnPageEncoder createEncoder(TableSpec.ColumnSpec columnSpec, ColumnPage inputPage,
+      Map<String, Object> encoderParameter) {
     // TODO: add log
     if (columnSpec instanceof TableSpec.MeasureSpec) {
       return createEncoderForMeasure(inputPage);
     } else {
-      if (newWay) {
-        return createEncoderForDimension((TableSpec.DimensionSpec) columnSpec, inputPage);
-      } else {
         assert columnSpec instanceof TableSpec.DimensionSpec;
-        return createEncoderForDimensionLegacy((TableSpec.DimensionSpec) columnSpec);
-      }
+      return createEncoderForDimensionLegacy((TableSpec.DimensionSpec) columnSpec,
+          encoderParameter, inputPage);
     }
   }
 
-  private ColumnPageEncoder createEncoderForDimension(TableSpec.DimensionSpec columnSpec,
-      ColumnPage inputPage) {
-    Compressor compressor = CompressorFactory.getInstance().getCompressor();
-    switch (columnSpec.getColumnType()) {
-      case GLOBAL_DICTIONARY:
-      case DIRECT_DICTIONARY:
-      case PLAIN_VALUE:
-        return new DirectCompressCodec(inputPage.getDataType()).createEncoder(null);
-      case COMPLEX:
-        return new ComplexDimensionIndexCodec(false, false, compressor).createEncoder(null);
-      default:
-        throw new RuntimeException("unsupported dimension type: " +
-            columnSpec.getColumnType());
-    }
-  }
-
-  private ColumnPageEncoder createEncoderForDimensionLegacy(TableSpec.DimensionSpec dimensionSpec) {
+  private ColumnPageEncoder createEncoderForDimensionLegacy(TableSpec.DimensionSpec dimensionSpec,
+      Map<String, Object> encoderParameter, ColumnPage inputPage) {
     Compressor compressor = CompressorFactory.getInstance().getCompressor();
     switch (dimensionSpec.getColumnType()) {
       case GLOBAL_DICTIONARY:
-        return new DictDimensionIndexCodec(
+        return new PrimitiveTypeColumnCodec(
             dimensionSpec.isInSortColumns(),
             dimensionSpec.isInSortColumns() && dimensionSpec.isDoInvertedIndex(),
-            compressor).createEncoder(null);
+            compressor, DataTypes.INT, Encoding.DICTIONARY).createEncoder(encoderParameter);
       case DIRECT_DICTIONARY:
-        return new DirectDictDimensionIndexCodec(
+        return new PrimitiveTypeColumnCodec(
             dimensionSpec.isInSortColumns(),
             dimensionSpec.isInSortColumns() && dimensionSpec.isDoInvertedIndex(),
-            compressor).createEncoder(null);
+            compressor, DataTypes.INT, Encoding.DIRECT_DICTIONARY).createEncoder(encoderParameter);
       case PLAIN_VALUE:
-        return new HighCardDictDimensionIndexCodec(
-            dimensionSpec.isInSortColumns(),
-            dimensionSpec.isInSortColumns() && dimensionSpec.isDoInvertedIndex(),
-            dimensionSpec.getSchemaDataType() == DataTypes.VARCHAR,
-            compressor).createEncoder(null);
+        if(!inputPage.isLocalDictGeneratedPage()) {
+          return new HighCardDictDimensionIndexCodec(dimensionSpec.isInSortColumns(),
+              dimensionSpec.isInSortColumns() && dimensionSpec.isDoInvertedIndex(), compressor)
+              .createEncoder(null);
+        } else {
+          return new PrimitiveTypeColumnCodec(
+              dimensionSpec.isInSortColumns(),
+              dimensionSpec.isInSortColumns() && dimensionSpec.isDoInvertedIndex(),
+              compressor, DataTypes.INT, Encoding.DICTIONARY).createEncoder(null);
+        }
       default:
         throw new RuntimeException("unsupported dimension type: " +
             dimensionSpec.getColumnType());

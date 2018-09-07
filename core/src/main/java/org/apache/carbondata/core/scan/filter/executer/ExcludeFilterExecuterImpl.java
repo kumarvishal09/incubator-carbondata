@@ -19,6 +19,7 @@ package org.apache.carbondata.core.scan.filter.executer;
 import java.io.IOException;
 import java.util.BitSet;
 
+import org.apache.carbondata.core.constants.CarbonCommonConstants;
 import org.apache.carbondata.core.datastore.block.SegmentProperties;
 import org.apache.carbondata.core.datastore.chunk.DimensionColumnPage;
 import org.apache.carbondata.core.datastore.chunk.impl.DimensionRawColumnChunk;
@@ -26,6 +27,7 @@ import org.apache.carbondata.core.datastore.chunk.impl.MeasureRawColumnChunk;
 import org.apache.carbondata.core.datastore.page.ColumnPage;
 import org.apache.carbondata.core.metadata.datatype.DataType;
 import org.apache.carbondata.core.metadata.datatype.DataTypes;
+import org.apache.carbondata.core.metadata.encoder.Encoding;
 import org.apache.carbondata.core.scan.filter.FilterUtil;
 import org.apache.carbondata.core.scan.filter.intf.RowIntf;
 import org.apache.carbondata.core.scan.filter.resolver.resolverinfo.DimColumnResolvedFilterInfo;
@@ -53,10 +55,10 @@ public class ExcludeFilterExecuterImpl implements FilterExecuter {
    */
   private boolean isNaturalSorted = false;
 
-  private byte[][] filterValues;
+  private Object[] dimensionFilterValues;
 
-  public ExcludeFilterExecuterImpl(byte[][] filterValues, boolean isNaturalSorted) {
-    this.filterValues = filterValues;
+  public ExcludeFilterExecuterImpl(Object[] filterValues, boolean isNaturalSorted) {
+    this.dimensionFilterValues = filterValues;
     this.isNaturalSorted = isNaturalSorted;
   }
   public ExcludeFilterExecuterImpl(DimColumnResolvedFilterInfo dimColEvaluatorInfo,
@@ -100,19 +102,46 @@ public class ExcludeFilterExecuterImpl implements FilterExecuter {
       }
       DimensionRawColumnChunk dimensionRawColumnChunk =
           rawBlockletColumnChunks.getDimensionRawColumnChunks()[chunkIndex];
-      DimensionColumnPage[] dimensionColumnPages =
-          dimensionRawColumnChunk.decodeAllColumnPages();
-      filterValues = FilterUtil
-          .getEncodedFilterValues(dimensionRawColumnChunk.getLocalDictionary(),
-              dimColumnExecuterInfo.filterKeysForExclude);
+      boolean isNullFilter = false;
       BitSetGroup bitSetGroup = new BitSetGroup(dimensionRawColumnChunk.getPagesCount());
-      for (int i = 0; i < dimensionColumnPages.length; i++) {
-        BitSet bitSet = getFilteredIndexes(dimensionColumnPages[i],
-            dimensionRawColumnChunk.getRowCount()[i], useBitsetPipeLine,
-            rawBlockletColumnChunks.getBitSetGroup(), i);
+      if (dimensionRawColumnChunk.isAdaptiveForDictionary() && dimColEvaluatorInfo.getDimension()
+          .hasEncoding(Encoding.DICTIONARY)) {
+        dimensionFilterValues =
+            FilterUtil.getFilterValueForDictionaryDims(dimColumnExecuterInfo.getFilterKeys());
+        if (dimensionFilterValues.length == 1
+            && dimensionFilterValues[0].equals(CarbonCommonConstants.MEMBER_DEFAULT_VAL_SURROGATE_KEY)) {
+          isNullFilter = true;
+        }
+      } else if (dimensionRawColumnChunk.isLVSeperated()
+          && dimColumnExecuterInfo.getFilterKeys().length == 1 && !(
+          dimColEvaluatorInfo.getDimension().hasEncoding(Encoding.DICTIONARY)
+              || dimColEvaluatorInfo.getDimension().hasEncoding(Encoding.DIRECT_DICTIONARY))) {
+        if (ByteUtil.compare(dimColumnExecuterInfo.getFilterKeys()[0],
+            CarbonCommonConstants.MEMBER_DEFAULT_VAL_ARRAY) == 0 && null == dimensionRawColumnChunk
+            .getLocalDictionary()) {
+          dimensionFilterValues[0] = CarbonCommonConstants.EMPTY_BYTE_ARRAY;
+        }
+        isNullFilter = true;
+      }
+      dimensionFilterValues = FilterUtil
+          .getEncodedFilterValues(dimensionRawColumnChunk.isAdaptiveForDictionary(),
+              dimensionRawColumnChunk.getLocalDictionary(),
+              dimColumnExecuterInfo.filterKeysForExclude);
+      for (int i = 0; i < dimensionRawColumnChunk.getPagesCount(); i++) {
+        BitSet bitSet;
+        if (isNullFilter && null != dimensionRawColumnChunk.getPresenceMeta()[i]
+            && dimensionRawColumnChunk.getPresenceMeta()[i].isNullBitset()
+            && dimensionRawColumnChunk.getPresenceMeta()[i].getBitSet().isEmpty()) {
+          bitSet = new BitSet(dimensionRawColumnChunk.getRowCount()[i]);
+          bitSet.flip(0, dimensionRawColumnChunk.getRowCount()[i]);
+        } else {
+          DimensionColumnPage dimensionColumnPage = dimensionRawColumnChunk.decodeColumnPage(i);
+          bitSet =
+              getFilteredIndexes(dimensionColumnPage, dimensionRawColumnChunk.getRowCount()[i],
+                  useBitsetPipeLine, rawBlockletColumnChunks.getBitSetGroup(), i);
+        }
         bitSetGroup.setBitSet(bitSet, i);
       }
-
       return bitSetGroup;
     } else if (isMeasurePresentInCurrentBlock) {
       int chunkIndex = segmentProperties.getMeasuresOrdinalToChunkMapping()
@@ -297,9 +326,9 @@ public class ExcludeFilterExecuterImpl implements FilterExecuter {
   protected BitSet getFilteredIndexes(DimensionColumnPage dimensionColumnPage,
       int numberOfRows, boolean useBitsetPipeLine, BitSetGroup prvBitSetGroup, int pageNumber) {
     // check whether applying filtered based on previous bitset will be optimal
-    if (filterValues.length > 0 && CarbonUtil
+    if (dimensionFilterValues.length > 0 && CarbonUtil
         .usePreviousFilterBitsetGroup(useBitsetPipeLine, prvBitSetGroup, pageNumber,
-            filterValues.length)) {
+            dimensionFilterValues.length)) {
       return getFilteredIndexesUisngPrvBitset(dimensionColumnPage, prvBitSetGroup, pageNumber);
     } else {
       return getFilteredIndexes(dimensionColumnPage, numberOfRows);
@@ -336,7 +365,7 @@ public class ExcludeFilterExecuterImpl implements FilterExecuter {
       for (int index = prvPageBitSet.nextSetBit(0);
            index >= 0; index = prvPageBitSet.nextSetBit(index + 1)) {
         compareResult = CarbonUtil
-            .isFilterPresent(filterValues, dimensionColumnPage, 0, filterValues.length - 1, index);
+            .isFilterPresent(dimensionFilterValues, dimensionColumnPage, 0, dimensionFilterValues.length - 1, index);
         if (compareResult != 0) {
           bitSet.set(index);
         } else {
@@ -349,7 +378,7 @@ public class ExcludeFilterExecuterImpl implements FilterExecuter {
       for (int index = prvPageBitSet.nextSetBit(0);
            index >= 0; index = prvPageBitSet.nextSetBit(index + 1)) {
         compareResult = CarbonUtil
-            .isFilterPresent(filterValues, dimensionColumnPage, 0, filterValues.length - 1,
+            .isFilterPresent(dimensionFilterValues, dimensionColumnPage, 0, dimensionFilterValues.length - 1,
                 dimensionColumnPage.getInvertedReverseIndex(index));
         if (compareResult != 0) {
           bitSet.set(index);
@@ -367,17 +396,17 @@ public class ExcludeFilterExecuterImpl implements FilterExecuter {
       DimensionColumnPage dimensionColumnPage, int numerOfRows) {
     BitSet bitSet = new BitSet(numerOfRows);
     bitSet.flip(0, numerOfRows);
-    if (filterValues.length == 0) {
+    if (dimensionFilterValues.length == 0) {
       return bitSet;
     }
     int startIndex = 0;
-    for (int i = 0; i < filterValues.length; i++) {
+    for (int i = 0; i < dimensionFilterValues.length; i++) {
       if (startIndex >= numerOfRows) {
         break;
       }
       int[] rangeIndex = CarbonUtil
           .getRangeIndexUsingBinarySearch(dimensionColumnPage, startIndex, numerOfRows - 1,
-              filterValues[i]);
+              dimensionFilterValues[i]);
       for (int j = rangeIndex[0]; j <= rangeIndex[1]; j++) {
         bitSet.flip(dimensionColumnPage.getInvertedIndex(j));
       }
@@ -393,19 +422,19 @@ public class ExcludeFilterExecuterImpl implements FilterExecuter {
     BitSet bitSet = new BitSet(numerOfRows);
     bitSet.flip(0, numerOfRows);
     // filterValues can be null when the dictionary chunk and surrogate size both are one
-    if (filterValues.length == 0) {
+    if (dimensionFilterValues.length == 0) {
       return bitSet;
     }
     // binary search can only be applied if column is sorted
     if (isNaturalSorted) {
       int startIndex = 0;
-      for (int i = 0; i < filterValues.length; i++) {
+      for (int i = 0; i < dimensionFilterValues.length; i++) {
         if (startIndex >= numerOfRows) {
           break;
         }
         int[] rangeIndex = CarbonUtil
             .getRangeIndexUsingBinarySearch(dimensionColumnPage, startIndex, numerOfRows - 1,
-                filterValues[i]);
+                dimensionFilterValues[i]);
         for (int j = rangeIndex[0]; j <= rangeIndex[1]; j++) {
           bitSet.flip(j);
         }
@@ -414,9 +443,9 @@ public class ExcludeFilterExecuterImpl implements FilterExecuter {
         }
       }
     } else {
-      if (filterValues.length > 1) {
+      if (dimensionFilterValues.length > 1) {
         for (int i = 0; i < numerOfRows; i++) {
-          int index = CarbonUtil.binarySearch(filterValues, 0, filterValues.length - 1,
+          int index = CarbonUtil.binarySearch(dimensionFilterValues, 0, dimensionFilterValues.length - 1,
               dimensionColumnPage, i);
           if (index >= 0) {
             bitSet.flip(i);
@@ -424,7 +453,7 @@ public class ExcludeFilterExecuterImpl implements FilterExecuter {
         }
       } else {
         for (int j = 0; j < numerOfRows; j++) {
-          if (dimensionColumnPage.compareTo(j, filterValues[0]) == 0) {
+          if (dimensionColumnPage.compareTo(j, dimensionFilterValues[0]) == 0) {
             bitSet.flip(j);
           }
         }

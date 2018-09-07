@@ -213,7 +213,7 @@ public class TableSpec {
     }
   }
 
-  public class DimensionSpec extends ColumnSpec implements Writable {
+  public static class DimensionSpec extends ColumnSpec implements Writable {
 
     // indicate whether this dimension is in sort column
     private boolean inSortColumns;
@@ -227,6 +227,14 @@ public class TableSpec {
       this.doInvertedIndex = dimension.isUseInvertedIndex();
     }
 
+    DimensionSpec(String columnName, DataType dataType, ColumnType columnType) {
+      super(columnName, dataType, columnType);
+    }
+
+    public static DimensionSpec newInstance(String columnName, DataType dataType,
+        ColumnType columnType) {
+      return new DimensionSpec(columnName, dataType, columnType);
+    }
     public boolean isInSortColumns() {
       return inSortColumns;
     }
@@ -246,10 +254,14 @@ public class TableSpec {
     }
   }
 
-  public class MeasureSpec extends ColumnSpec implements Writable {
+  public static class MeasureSpec extends ColumnSpec implements Writable {
 
     MeasureSpec(String fieldName, DataType dataType) {
       super(fieldName, dataType, ColumnType.MEASURE);
+    }
+
+    public static MeasureSpec newInstance(String fieldName, DataType dataType) {
+      return new MeasureSpec(fieldName, dataType);
     }
 
     @Override

@@ -179,6 +179,8 @@ public class CarbonFactDataHandlerModel {
 
   private List<Integer> varcharDimIdxInNoDict;
 
+  private int[] dictionaryColumnCardinality;
+
   /**
    * Create the model using @{@link CarbonDataLoadConfiguration}
    */
@@ -259,6 +261,8 @@ public class CarbonFactDataHandlerModel {
     String carbonDataDirectoryPath = getCarbonDataFolderLocation(configuration);
 
     CarbonFactDataHandlerModel carbonFactDataHandlerModel = new CarbonFactDataHandlerModel();
+    carbonFactDataHandlerModel
+        .setDictionaryColumnCardinality(configuration.getCardinalityFinder().getCardinality());
     carbonFactDataHandlerModel.setSchemaUpdatedTimeStamp(configuration.getSchemaUpdatedTimeStamp());
     carbonFactDataHandlerModel.setDatabaseName(identifier.getDatabaseName());
     carbonFactDataHandlerModel.setTableName(identifier.getTableName());
@@ -327,7 +331,6 @@ public class CarbonFactDataHandlerModel {
         varcharDimIdxInNoDict.add(dim.getOrdinal() - dictDimCount);
       }
     }
-
     CarbonFactDataHandlerModel carbonFactDataHandlerModel = new CarbonFactDataHandlerModel();
     carbonFactDataHandlerModel.setSchemaUpdatedTimeStamp(carbonTable.getTableLastUpdatedTime());
     carbonFactDataHandlerModel.setDatabaseName(loadModel.getDatabaseName());
@@ -346,6 +349,8 @@ public class CarbonFactDataHandlerModel {
         .getColumnSchemaList(carbonTable.getDimensionByTableName(tableName),
             carbonTable.getMeasureByTableName(tableName));
     carbonFactDataHandlerModel.setWrapperColumnSchema(wrapperColumnSchema);
+    carbonFactDataHandlerModel
+        .setDictionaryColumnCardinality(segmentProperties.getDimColumnsCardinality());
     // get the cardinality for all all the columns including no dictionary columns
     int[] formattedCardinality = CarbonUtil
         .getFormattedCardinality(segmentProperties.getDimColumnsCardinality(), wrapperColumnSchema);
@@ -700,5 +705,12 @@ public class CarbonFactDataHandlerModel {
     return varcharDimIdxInNoDict;
   }
 
+  public int[] getDictionaryColumnCardinality() {
+    return dictionaryColumnCardinality;
+  }
+
+  public void setDictionaryColumnCardinality(int[] dictionaryColumnCardinality) {
+    this.dictionaryColumnCardinality = dictionaryColumnCardinality;
+  }
 }
 

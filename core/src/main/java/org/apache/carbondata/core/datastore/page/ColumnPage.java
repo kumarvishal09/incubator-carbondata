@@ -29,10 +29,12 @@ import org.apache.carbondata.core.datastore.compression.CompressorFactory;
 import org.apache.carbondata.core.datastore.page.encoding.ColumnPageEncoderMeta;
 import org.apache.carbondata.core.datastore.page.encoding.bool.BooleanConvert;
 import org.apache.carbondata.core.datastore.page.statistics.ColumnPageStatsCollector;
+import org.apache.carbondata.core.datastore.page.statistics.PrimitivePageStatsCollector;
 import org.apache.carbondata.core.datastore.page.statistics.SimpleStatsResult;
 import org.apache.carbondata.core.localdictionary.PageLevelDictionary;
 import org.apache.carbondata.core.localdictionary.generator.LocalDictionaryGenerator;
 import org.apache.carbondata.core.memory.MemoryException;
+import org.apache.carbondata.core.metadata.blocklet.PresenceMeta;
 import org.apache.carbondata.core.metadata.datatype.DataType;
 import org.apache.carbondata.core.metadata.datatype.DataTypes;
 import org.apache.carbondata.core.util.CarbonProperties;
@@ -62,6 +64,8 @@ public abstract class ColumnPage {
 
   // statistics collector for this column page
   protected ColumnPageStatsCollector statsCollector;
+
+  private PresenceMeta presenceMeta;
 
   protected static final boolean unsafe = Boolean.parseBoolean(CarbonProperties.getInstance()
       .getProperty(CarbonCommonConstants.ENABLE_UNSAFE_COLUMN_PAGE,
@@ -163,17 +167,22 @@ public abstract class ColumnPage {
   }
 
   public static ColumnPage newLocalDictPage(TableSpec.ColumnSpec columnSpec, DataType dataType,
-      int pageSize, LocalDictionaryGenerator localDictionaryGenerator,
-      boolean isComplexTypePrimitive) throws MemoryException {
+      int pageSize, LocalDictionaryGenerator localDictionaryGenerator) throws MemoryException {
+    ColumnPage encodedColumnPage;
+    TableSpec.MeasureSpec encodedSpec =
+        TableSpec.MeasureSpec.newInstance(columnSpec.getFieldName(), DataTypes.INT);
+    ColumnPageStatsCollector primitivePageStatsCollector =
+        PrimitivePageStatsCollector.newInstance(DataTypes.INT);
     if (unsafe) {
+      encodedColumnPage = new UnsafeFixLengthColumnPage(encodedSpec, DataTypes.INT, pageSize);
+      encodedColumnPage.setStatsCollector(primitivePageStatsCollector);
       return new LocalDictColumnPage(new UnsafeVarLengthColumnPage(columnSpec, dataType, pageSize),
-          new UnsafeFixLengthColumnPage(columnSpec, DataTypes.BYTE_ARRAY, pageSize,
-              CarbonCommonConstants.LOCAL_DICT_ENCODED_BYTEARRAY_SIZE),
-          localDictionaryGenerator, isComplexTypePrimitive);
+          encodedColumnPage, localDictionaryGenerator);
     } else {
+      encodedColumnPage = new SafeFixLengthColumnPage(encodedSpec, DataTypes.INT, pageSize);
+      encodedColumnPage.setStatsCollector(primitivePageStatsCollector);
       return new LocalDictColumnPage(new SafeVarLengthColumnPage(columnSpec, dataType, pageSize),
-          new SafeFixLengthColumnPage(columnSpec, DataTypes.BYTE_ARRAY, pageSize),
-          localDictionaryGenerator, isComplexTypePrimitive);
+          encodedColumnPage, localDictionaryGenerator);
     }
   }
 
@@ -501,19 +510,19 @@ public abstract class ColumnPage {
     if (dataType == DataTypes.BOOLEAN) {
       putBoolean(rowId, false);
     } else if (dataType == DataTypes.BYTE) {
-      putByte(rowId, (byte) 0);
+      putByte(rowId, (byte) 1);
     } else if (dataType == DataTypes.SHORT) {
-      putShort(rowId, (short) 0);
+      putShort(rowId, (short) 1);
     } else if (dataType == DataTypes.INT) {
-      putInt(rowId, 0);
+      putInt(rowId, 1);
     } else if (dataType == DataTypes.LONG) {
-      putLong(rowId, 0L);
+      putLong(rowId, 1L);
     } else if (dataType == DataTypes.DOUBLE) {
-      putDouble(rowId, 0.0);
+      putDouble(rowId, 1.0);
     } else if (DataTypes.isDecimal(dataType)) {
       putDecimal(rowId, BigDecimal.ZERO);
     } else {
-      throw new IllegalArgumentException("unsupported data type: " + dataType);
+      putBytes(rowId, new byte[0]);
     }
   }
 
@@ -843,5 +852,63 @@ public abstract class ColumnPage {
 
   public int getActualRowCount() {
     throw new UnsupportedOperationException("Operation not supported");
+  }
+
+  public ColumnPage getRowOffsetPage() {
+    throw new UnsupportedOperationException("Operation not supported");
+  }
+
+  public ColumnPage getLocalDictPage() {
+    throw new UnsupportedOperationException("Operation not supported");
+  }
+
+  /**
+   * Convert the data of the page based on the data type for each row
+   * While preparing the inverted index for the page,
+   * we need the data based on data type for no dict measure column if adaptive encoding is applied
+   * This is similar to page.getByteArrayPage()
+   *
+   * @return
+   */
+  public Object[] getPageBasedOnDataType() {
+    Object[] data = new Object[getActualRowCount()];
+    if (dataType == DataTypes.BYTE || dataType == DataTypes.BOOLEAN) {
+      for (int i = 0; i < getActualRowCount(); i++) {
+        data[i] = getByte(i);
+      }
+    } else if (dataType == DataTypes.SHORT) {
+      for (int i = 0; i < getActualRowCount(); i++) {
+        data[i] = getShort(i);
+      }
+    } else if (dataType == DataTypes.SHORT_INT) {
+      for (int i = 0; i < getActualRowCount(); i++) {
+        data[i] = getShortInt(i);
+      }
+    } else if (dataType == DataTypes.INT) {
+      for (int i = 0; i < getActualRowCount(); i++) {
+        data[i] = getInt(i);
+      }
+    } else if (dataType == DataTypes.LONG) {
+      for (int i = 0; i < getActualRowCount(); i++) {
+        data[i] = getLong(i);
+      }
+    } else if (dataType == DataTypes.FLOAT) {
+      for (int i = 0; i < getActualRowCount(); i++) {
+        data[i] = getFloat(i);
+      }
+    } else if (dataType == DataTypes.DOUBLE) {
+      for (int i = 0; i < getActualRowCount(); i++) {
+        data[i] = getDouble(i);
+      }
+    }
+    return data;
+  }
+
+  public PresenceMeta getPresenceMeta() {
+    return presenceMeta;
+  }
+
+  public void setPresenceMeta(PresenceMeta presenceMeta) {
+    this.presenceMeta = presenceMeta;
   }
 }

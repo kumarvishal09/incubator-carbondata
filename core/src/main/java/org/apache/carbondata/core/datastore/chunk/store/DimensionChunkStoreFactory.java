@@ -23,6 +23,7 @@ import org.apache.carbondata.core.datastore.chunk.store.impl.safe.SafeFixedLengt
 import org.apache.carbondata.core.datastore.chunk.store.impl.safe.SafeVariableIntLengthDimensionDataChunkStore;
 import org.apache.carbondata.core.datastore.chunk.store.impl.safe.SafeVariableShortLengthDimensionDataChunkStore;
 import org.apache.carbondata.core.datastore.chunk.store.impl.unsafe.UnsafeFixedLengthDimensionDataChunkStore;
+import org.apache.carbondata.core.datastore.chunk.store.impl.unsafe.UnsafeLVDimChunkStore;
 import org.apache.carbondata.core.datastore.chunk.store.impl.unsafe.UnsafeVariableIntLengthDimensionDataChunkStore;
 import org.apache.carbondata.core.datastore.chunk.store.impl.unsafe.UnsafeVariableShortLengthDimensionDataChunkStore;
 import org.apache.carbondata.core.scan.result.vector.CarbonDictionary;
@@ -65,7 +66,7 @@ public class DimensionChunkStoreFactory {
    */
   public DimensionDataChunkStore getDimensionChunkStore(int columnValueSize,
       boolean isInvertedIndex, int numberOfRows, long totalSize, DimensionStoreType storeType,
-      CarbonDictionary dictionary) {
+      CarbonDictionary dictionary, int[] offset) {
     if (isUnsafe) {
       switch (storeType) {
         case FIXED_LENGTH:
@@ -82,6 +83,9 @@ public class DimensionChunkStoreFactory {
               new UnsafeFixedLengthDimensionDataChunkStore(totalSize,
                   3, isInvertedIndex, numberOfRows),
               dictionary);
+        case LV_STORE:
+          return new UnsafeLVDimChunkStore(totalSize, isInvertedIndex,
+              numberOfRows, offset);
         default:
           throw new UnsupportedOperationException("Invalid dimension store type");
       }
@@ -107,6 +111,6 @@ public class DimensionChunkStoreFactory {
    * dimension store type enum
    */
   public enum DimensionStoreType {
-    FIXED_LENGTH, VARIABLE_SHORT_LENGTH, VARIABLE_INT_LENGTH, LOCAL_DICT;
+    FIXED_LENGTH, VARIABLE_SHORT_LENGTH, VARIABLE_INT_LENGTH, LOCAL_DICT, LV_STORE;
   }
 }

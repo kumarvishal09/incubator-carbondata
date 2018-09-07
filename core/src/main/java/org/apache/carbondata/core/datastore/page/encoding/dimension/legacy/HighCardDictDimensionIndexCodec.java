@@ -17,13 +17,10 @@
 
 package org.apache.carbondata.core.datastore.page.encoding.dimension.legacy;
 
-import java.util.ArrayList;
-import java.util.List;
 import java.util.Map;
 
-import org.apache.carbondata.core.datastore.columnar.BlockIndexerStorageForNoInvertedIndexForShort;
-import org.apache.carbondata.core.datastore.columnar.BlockIndexerStorageForShort;
-import org.apache.carbondata.core.datastore.columnar.IndexStorage;
+import org.apache.carbondata.core.datastore.columnar.BinaryPageIndexGenerator;
+import org.apache.carbondata.core.datastore.columnar.PageIndexGenerator;
 import org.apache.carbondata.core.datastore.compression.Compressor;
 import org.apache.carbondata.core.datastore.page.ColumnPage;
 import org.apache.carbondata.core.datastore.page.encoding.ColumnPageEncoder;
@@ -31,15 +28,10 @@ import org.apache.carbondata.core.util.ByteUtil;
 import org.apache.carbondata.format.Encoding;
 
 public class HighCardDictDimensionIndexCodec extends IndexStorageCodec {
-  /**
-   * whether this column is varchar data type(long string)
-   */
-  private boolean isVarcharType;
 
   public HighCardDictDimensionIndexCodec(boolean isSort, boolean isInvertedIndex,
-      boolean isVarcharType, Compressor compressor) {
+      Compressor compressor) {
     super(isSort, isInvertedIndex, compressor);
-    this.isVarcharType = isVarcharType;
   }
 
   @Override
@@ -47,38 +39,23 @@ public class HighCardDictDimensionIndexCodec extends IndexStorageCodec {
     return "HighCardDictDimensionIndexCodec";
   }
 
-  @Override
-  public ColumnPageEncoder createEncoder(Map<String, String> parameter) {
-    return new IndexStorageEncoder() {
+  @Override public ColumnPageEncoder createEncoder(Map<String, Object> parameter) {
+    return new IndexStorageEncoder(true, null, Encoding.DIRECT_STRING) {
 
       @Override
       protected void encodeIndexStorage(ColumnPage input) {
-        IndexStorage indexStorage;
+        PageIndexGenerator<byte[][]> pageIndexGenerator;
         byte[][] data = input.getByteArrayPage();
-        boolean isDictionary = input.isLocalDictGeneratedPage();
-        if (isInvertedIndex) {
-          indexStorage = new BlockIndexerStorageForShort(data, isDictionary, !isDictionary, isSort);
-        } else {
-          indexStorage =
-              new BlockIndexerStorageForNoInvertedIndexForShort(data, isDictionary);
+        int[] intPage = input.getRowOffsetPage().getIntPage();
+        int[] length = new int[intPage.length -1];
+        for (int i = 0; i < intPage.length -1 ; i++) {
+          length[i] =  intPage[i + 1] - intPage[i];
         }
-        byte[] flattened = ByteUtil.flatten(indexStorage.getDataPage());
+        pageIndexGenerator =
+              new BinaryPageIndexGenerator(data, isSort, length);
+        byte[] flattened = ByteUtil.flatten(pageIndexGenerator.getDataPage());
         super.compressedDataPage = compressor.compressByte(flattened);
-        super.indexStorage = indexStorage;
-      }
-
-      @Override
-      protected List<Encoding> getEncodingList() {
-        List<Encoding> encodings = new ArrayList<>();
-        if (isVarcharType) {
-          encodings.add(Encoding.DIRECT_COMPRESS_VARCHAR);
-        } else if (indexStorage.getRowIdPageLengthInBytes() > 0) {
-          encodings.add(Encoding.INVERTED_INDEX);
-        }
-        if (indexStorage.getDataRlePageLengthInBytes() > 0) {
-          encodings.add(Encoding.RLE);
-        }
-        return encodings;
+        super.pageIndexGenerator = pageIndexGenerator;
       }
     };
   }

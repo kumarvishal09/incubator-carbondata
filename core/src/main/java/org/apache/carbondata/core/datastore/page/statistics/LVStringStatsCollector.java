@@ -23,13 +23,17 @@ import org.apache.carbondata.core.metadata.datatype.DataType;
 import org.apache.carbondata.core.metadata.datatype.DataTypes;
 import org.apache.carbondata.core.util.ByteUtil;
 
-public abstract class LVStringStatsCollector implements ColumnPageStatsCollector {
+public class LVStringStatsCollector implements ColumnPageStatsCollector {
+
+  public LVStringStatsCollector() {
+
+  }
 
   private byte[] min, max;
 
   @Override
   public void updateNull(int rowId) {
-
+    update(new byte[0]);
   }
 
   @Override
@@ -62,26 +66,23 @@ public abstract class LVStringStatsCollector implements ColumnPageStatsCollector
 
   }
 
-  protected abstract byte[] getActualValue(byte[] value);
-
   @Override
   public void update(byte[] value) {
     // input value is LV encoded
-    byte[] newValue = getActualValue(value);
     if (min == null) {
-      min = newValue;
+      min = value;
     }
 
     if (null == max) {
-      max = newValue;
+      max = value;
     }
 
-    if (ByteUtil.UnsafeComparer.INSTANCE.compareTo(min, newValue) > 0) {
-      min = newValue;
+    if (ByteUtil.UnsafeComparer.INSTANCE.compareTo(min, value) > 0) {
+      min = value;
     }
 
-    if (ByteUtil.UnsafeComparer.INSTANCE.compareTo(max, newValue) < 0) {
-      max = newValue;
+    if (ByteUtil.UnsafeComparer.INSTANCE.compareTo(max, value) < 0) {
+      max = value;
     }
   }
 

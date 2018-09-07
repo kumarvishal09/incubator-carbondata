@@ -57,6 +57,7 @@ import org.apache.carbondata.core.keygenerator.factory.KeyGeneratorFactory;
 import org.apache.carbondata.core.keygenerator.mdkey.MultiDimKeyVarLengthGenerator;
 import org.apache.carbondata.core.metadata.AbsoluteTableIdentifier;
 import org.apache.carbondata.core.metadata.ColumnIdentifier;
+import org.apache.carbondata.core.metadata.blocklet.PresenceMeta;
 import org.apache.carbondata.core.metadata.datatype.DataType;
 import org.apache.carbondata.core.metadata.datatype.DataTypes;
 import org.apache.carbondata.core.metadata.encoder.Encoding;
@@ -1923,11 +1924,46 @@ public final class FilterUtil {
    * @param bitSet
    */
   public static void removeNullValues(DimensionColumnPage dimensionColumnPage,
-      BitSet bitSet, byte[] defaultValue) {
+      BitSet bitSet, Object defaultValue) {
     if (!bitSet.isEmpty()) {
       for (int i = bitSet.nextSetBit(0); i >= 0; i = bitSet.nextSetBit(i + 1)) {
         if (dimensionColumnPage.compareTo(i, defaultValue) == 0) {
           bitSet.flip(i);
+        }
+      }
+    }
+  }
+
+  public static void removeNullValues(DimensionColumnPage dimensionColumnPage, BitSet bitSet) {
+    if (!bitSet.isEmpty()) {
+      if (dimensionColumnPage.getPresentMeta().isNullBitset() && !dimensionColumnPage
+          .isExplicitSorted() && !dimensionColumnPage.getPresentMeta().getBitSet().isEmpty()) {
+        for (int i = bitSet.nextSetBit(0); i >= 0; i = bitSet.nextSetBit(i + 1)) {
+          if (dimensionColumnPage.getPresentMeta().getBitSet().get(i)) {
+            bitSet.flip(i);
+          }
+        }
+      } else if (dimensionColumnPage.getPresentMeta().isNullBitset() && dimensionColumnPage
+          .isExplicitSorted() && !dimensionColumnPage.getPresentMeta().getBitSet().isEmpty()) {
+        for (int i = bitSet.nextSetBit(0); i >= 0; i = bitSet.nextSetBit(i + 1)) {
+          if (dimensionColumnPage.getPresentMeta().getBitSet()
+              .get(dimensionColumnPage.getInvertedReverseIndex(i))) {
+            bitSet.flip(i);
+          }
+        }
+      } else if (!dimensionColumnPage.getPresentMeta().isNullBitset() && !dimensionColumnPage
+          .isExplicitSorted()) {
+        for (int i = bitSet.nextSetBit(0); i >= 0; i = bitSet.nextSetBit(i + 1)) {
+          if (!dimensionColumnPage.getPresentMeta().getBitSet().get(i)) {
+            bitSet.flip(i);
+          }
+        }
+      } else {
+        for (int i = bitSet.nextSetBit(0); i >= 0; i = bitSet.nextSetBit(i + 1)) {
+          if (!dimensionColumnPage.getPresentMeta().getBitSet()
+              .get(dimensionColumnPage.getInvertedReverseIndex(i))) {
+            bitSet.flip(i);
+          }
         }
       }
     }
@@ -2015,33 +2051,65 @@ public final class FilterUtil {
    * actual filter values
    * @return encoded filter values
    */
-  public static byte[][] getEncodedFilterValues(CarbonDictionary dictionary,
-      byte[][] actualFilterValues) {
+  public static Object[] getEncodedFilterValues(boolean isAdaptive, CarbonDictionary dictionary,
+      Object[] actualFilterValues) {
+    Object[] filters;
     if (null == dictionary) {
       return actualFilterValues;
     }
-    KeyGenerator keyGenerator = KeyGeneratorFactory
-        .getKeyGenerator(new int[] { CarbonCommonConstants.LOCAL_DICTIONARY_MAX });
-    int[] dummy = new int[1];
-    List<byte[]> encodedFilters = new ArrayList<>();
-    for (byte[] actualFilter : actualFilterValues) {
-      for (int i = 1; i < dictionary.getDictionarySize(); i++) {
-        if (dictionary.getDictionaryValue(i) == null) {
-          continue;
-        }
-        if (ByteUtil.UnsafeComparer.INSTANCE
-            .compareTo(actualFilter, dictionary.getDictionaryValue(i)) == 0) {
-          try {
-            dummy[0] = i;
-            encodedFilters.add(keyGenerator.generateKey(dummy));
-          } catch (KeyGenException e) {
-            LOGGER.error(e);
+    if (!isAdaptive) {
+      KeyGenerator keyGenerator = KeyGeneratorFactory
+          .getKeyGenerator(new int[] { CarbonCommonConstants.LOCAL_DICTIONARY_MAX });
+      int[] dummy = new int[1];
+      List<byte[]> encodedFilters = new ArrayList<>();
+      for (Object actualFilter : actualFilterValues) {
+        for (int i = 1; i < dictionary.getDictionarySize(); i++) {
+          if (dictionary.getDictionaryValue(i) == null) {
+            continue;
           }
-          break;
+          if (ByteUtil.UnsafeComparer.INSTANCE
+              .compareTo((byte[])actualFilter, dictionary.getDictionaryValue(i)) == 0) {
+            try {
+              dummy[0] = i;
+              encodedFilters.add(keyGenerator.generateKey(dummy));
+            } catch (KeyGenException e) {
+              LOGGER.error(e);
+            }
+            break;
+          }
         }
       }
+      java.util.Comparator<byte[]> filterNoDictValueComaparator =
+          new java.util.Comparator<byte[]>() {
+            @Override public int compare(byte[] filterMember1, byte[] filterMember2) {
+              return ByteUtil.UnsafeComparer.INSTANCE.compareTo(filterMember1, filterMember2);
+            }
+          };
+      Collections.sort(encodedFilters, filterNoDictValueComaparator);
+      filters = encodedFilters.toArray(new byte[encodedFilters.size()][]);
+    } else {
+      List<Integer> encodedFilters = new ArrayList<>();
+      for (Object actualFilter : actualFilterValues) {
+        for (int i = 1; i < dictionary.getDictionarySize(); i++) {
+          if (dictionary.getDictionaryValue(i) == null) {
+            continue;
+          }
+          if (ByteUtil.UnsafeComparer.INSTANCE
+              .compareTo((byte[])actualFilter, dictionary.getDictionaryValue(i)) == 0) {
+            try {
+              encodedFilters.add(i);
+            } catch (KeyGenException e) {
+              LOGGER.error(e);
+            }
+            break;
+          }
+        }
+      }
+      SerializableComparator serializableComparator = Comparator.getComparator(DataTypes.INT);
+      Collections.sort(encodedFilters, serializableComparator);
+      filters = encodedFilters.toArray(new Integer[encodedFilters.size()]);
     }
-    return getSortedEncodedFilters(encodedFilters);
+    return filters;
   }
 
   /**
@@ -2112,36 +2180,65 @@ public final class FilterUtil {
    * to check if using exclude will be more optimized
    * @return encoded filter values
    */
-  private static byte[][] getEncodedFilterValuesForRange(BitSet includeDictValues,
-      CarbonDictionary carbonDictionary, boolean useExclude) {
-    KeyGenerator keyGenerator = KeyGeneratorFactory
-        .getKeyGenerator(new int[] { CarbonCommonConstants.LOCAL_DICTIONARY_MAX });
-    List<byte[]> encodedFilterValues = new ArrayList<>();
-    int[] dummy = new int[1];
-    if (!useExclude) {
-      try {
-        for (int i = includeDictValues.nextSetBit(0);
-             i >= 0; i = includeDictValues.nextSetBit(i + 1)) {
-          dummy[0] = i;
-          encodedFilterValues.add(keyGenerator.generateKey(dummy));
-        }
-      } catch (KeyGenException e) {
-        LOGGER.error(e);
-      }
-      return encodedFilterValues.toArray(new byte[encodedFilterValues.size()][]);
-    } else {
-      try {
-        for (int i = 1; i < carbonDictionary.getDictionarySize(); i++) {
-          if (!includeDictValues.get(i) && null != carbonDictionary.getDictionaryValue(i)) {
+  private static Object[] getEncodedFilterValuesForRange(boolean isAdaptive,
+      BitSet includeDictValues, CarbonDictionary carbonDictionary, boolean useExclude) {
+    Object[] filterValues;
+    if (!isAdaptive) {
+      KeyGenerator keyGenerator = KeyGeneratorFactory
+          .getKeyGenerator(new int[] { CarbonCommonConstants.LOCAL_DICTIONARY_MAX });
+      List<byte[]> encodedFilterValues = new ArrayList<>();
+      int[] dummy = new int[1];
+      if (!useExclude) {
+        try {
+          for (int i = includeDictValues.nextSetBit(0);
+               i >= 0; i = includeDictValues.nextSetBit(i + 1)) {
             dummy[0] = i;
             encodedFilterValues.add(keyGenerator.generateKey(dummy));
           }
+        } catch (KeyGenException e) {
+          LOGGER.error(e);
         }
-      } catch (KeyGenException e) {
-        LOGGER.error(e);
+        filterValues = encodedFilterValues.toArray(new byte[encodedFilterValues.size()][]);
+      } else {
+        try {
+          for (int i = 1; i < carbonDictionary.getDictionarySize(); i++) {
+            if (!includeDictValues.get(i) && null != carbonDictionary.getDictionaryValue(i)) {
+              dummy[0] = i;
+              encodedFilterValues.add(keyGenerator.generateKey(dummy));
+            }
+          }
+        } catch (KeyGenException e) {
+          LOGGER.error(e);
+        }
+      }
+      java.util.Comparator<byte[]> filterNoDictValueComaparator =
+          new java.util.Comparator<byte[]>() {
+            @Override public int compare(byte[] filterMember1, byte[] filterMember2) {
+              return ByteUtil.UnsafeComparer.INSTANCE.compareTo(filterMember1, filterMember2);
+            }
+          };
+      Collections.sort(encodedFilterValues, filterNoDictValueComaparator);
+      filterValues = encodedFilterValues.toArray(new byte[encodedFilterValues.size()][]);
+    } else {
+      List<Integer> encodedFilterValues = new ArrayList<>();
+      if (!useExclude) {
+        for (int i = includeDictValues.nextSetBit(0);
+             i >= 0; i = includeDictValues.nextSetBit(i + 1)) {
+          encodedFilterValues.add(i);
+        }
+        filterValues = encodedFilterValues.toArray(new Object[encodedFilterValues.size()]);
+      } else {
+        for (int i = 1; i < carbonDictionary.getDictionarySize(); i++) {
+          if (!includeDictValues.get(i) && null != carbonDictionary.getDictionaryValue(i)) {
+            encodedFilterValues.add(i);
+          }
+        }
+        SerializableComparator serializableComparator = Comparator.getComparator(DataTypes.INT);
+        Collections.sort(encodedFilterValues, serializableComparator);
+        filterValues = encodedFilterValues.toArray(new Integer[encodedFilterValues.size()]);
       }
     }
-    return getSortedEncodedFilters(encodedFilterValues);
+    return filterValues;
   }
 
   /**
@@ -2155,7 +2252,7 @@ public final class FilterUtil {
    * is data was already sorted
    * @return
    */
-  public static FilterExecuter getFilterExecutorForRangeFilters(
+  public static FilterExecuter getFilterExecutorForRangeFilters(boolean isAdaptive,
       DimensionRawColumnChunk rawColumnChunk, Expression exp, boolean isNaturalSorted) {
     BitSet includeDictionaryValues;
     try {
@@ -2167,8 +2264,8 @@ public final class FilterUtil {
     boolean isExclude = includeDictionaryValues.cardinality() > 1 && FilterUtil
         .isExcludeFilterNeedsToApply(rawColumnChunk.getLocalDictionary().getDictionaryActualSize(),
             includeDictionaryValues.cardinality());
-    byte[][] encodedFilterValues = FilterUtil
-        .getEncodedFilterValuesForRange(includeDictionaryValues,
+    Object[] encodedFilterValues = FilterUtil
+        .getEncodedFilterValuesForRange(isAdaptive, includeDictionaryValues,
             rawColumnChunk.getLocalDictionary(), isExclude);
     FilterExecuter filterExecuter;
     if (!isExclude) {
@@ -2177,5 +2274,14 @@ public final class FilterUtil {
       filterExecuter = new ExcludeFilterExecuterImpl(encodedFilterValues, isNaturalSorted);
     }
     return filterExecuter;
+  }
+
+  public static Object[] getFilterValueForDictionaryDims(byte[][] actualFilterValue) {
+    Object[] filterValue = new Object[actualFilterValue.length];
+    for (int i = 0; i < filterValue.length; i++) {
+      filterValue[i] =
+          CarbonUtil.getSurrogateInternal(actualFilterValue[i], 0, actualFilterValue[i].length);
+    }
+    return filterValue;
   }
 }

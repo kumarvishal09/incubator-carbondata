@@ -52,6 +52,7 @@ import org.apache.carbondata.core.util.comparator.SerializableComparator;
 public class RowLevelRangeLessThanEqualFilterExecuterImpl extends RowLevelFilterExecuterImpl {
   protected byte[][] filterRangeValues;
   protected Object[] msrFilterRangeValues;
+  private Object[] dimFilterRangeValues;
   protected SerializableComparator comparator;
 
   /**
@@ -65,6 +66,7 @@ public class RowLevelRangeLessThanEqualFilterExecuterImpl extends RowLevelFilter
       Object[] msrFilterRangeValues, SegmentProperties segmentProperties) {
     super(dimColEvaluatorInfoList, msrColEvalutorInfoList, exp, tableIdentifier, segmentProperties,
         null);
+    this.dimFilterRangeValues = filterRangeValues;
     this.filterRangeValues = filterRangeValues;
     this.msrFilterRangeValues = msrFilterRangeValues;
     if (!msrColEvalutorInfoList.isEmpty()) {
@@ -193,6 +195,11 @@ public class RowLevelRangeLessThanEqualFilterExecuterImpl extends RowLevelFilter
       BitSetGroup bitSetGroup = new BitSetGroup(rawColumnChunk.getPagesCount());
       FilterExecuter filterExecuter = null;
       boolean isExclude = false;
+      if (rawColumnChunk.isAdaptiveForDictionary() && dimColEvaluatorInfoList.get(0).getDimension()
+          .hasEncoding(Encoding.DICTIONARY)) {
+        dimFilterRangeValues =
+            FilterUtil.getFilterValueForDictionaryDims(filterRangeValues);
+      }
       for (int i = 0; i < rawColumnChunk.getPagesCount(); i++) {
         if (rawColumnChunk.getMinValues() != null) {
           if (isScanRequired(rawColumnChunk.getMinValues()[i], this.filterRangeValues)) {
@@ -201,7 +208,8 @@ public class RowLevelRangeLessThanEqualFilterExecuterImpl extends RowLevelFilter
             if (null != rawColumnChunk.getLocalDictionary()) {
               if (null == filterExecuter) {
                 filterExecuter = FilterUtil
-                    .getFilterExecutorForRangeFilters(rawColumnChunk, exp, isNaturalSorted);
+                    .getFilterExecutorForRangeFilters(dimensionColumnPage.isAdaptiveEncoded(),
+                        rawColumnChunk, exp, isNaturalSorted);
                 if (filterExecuter instanceof ExcludeFilterExecuterImpl) {
                   isExclude = true;
                 }
@@ -311,7 +319,7 @@ public class RowLevelRangeLessThanEqualFilterExecuterImpl extends RowLevelFilter
 
   private BitSet getFilteredIndexes(DimensionColumnPage dimensionColumnPage,
       int numerOfRows) {
-    byte[] defaultValue = null;
+    Object defaultValue = null;
     if (dimColEvaluatorInfoList.get(0).getDimension().hasEncoding(Encoding.DIRECT_DICTIONARY)) {
       DirectDictionaryGenerator directDictionaryGenerator = DirectDictionaryKeyGeneratorFactory
           .getDirectDictionaryGenerator(
@@ -319,11 +327,15 @@ public class RowLevelRangeLessThanEqualFilterExecuterImpl extends RowLevelFilter
       int key = directDictionaryGenerator.generateDirectSurrogateKey(null);
       CarbonDimension currentBlockDimension =
           segmentProperties.getDimensions().get(dimensionChunkIndex[0]);
-      if (currentBlockDimension.isSortColumn()) {
-        defaultValue = FilterUtil.getMaskKey(key, currentBlockDimension,
-            this.segmentProperties.getSortColumnsGenerator());
+      if(dimensionColumnPage.isAdaptiveEncoded()) {
+          defaultValue = key;
       } else {
-        defaultValue = ByteUtil.toXorBytes(key);
+        if (currentBlockDimension.isSortColumn()) {
+          defaultValue = FilterUtil.getMaskKey(key, currentBlockDimension,
+              this.segmentProperties.getSortColumnsGenerator());
+        } else {
+          defaultValue = ByteUtil.toXorBytes(key);
+        }
       }
     } else if (dimColEvaluatorInfoList.get(0).getDimension().getDataType() != DataTypes.STRING) {
       defaultValue = CarbonCommonConstants.EMPTY_BYTE_ARRAY;
@@ -336,8 +348,12 @@ public class RowLevelRangeLessThanEqualFilterExecuterImpl extends RowLevelFilter
       bitSet = setFilterdIndexToBitSet(dimensionColumnPage, numerOfRows, defaultValue);
     }
     if (dimensionColumnPage.isNoDicitionaryColumn()) {
-      FilterUtil.removeNullValues(dimensionColumnPage, bitSet,
-          CarbonCommonConstants.MEMBER_DEFAULT_VAL_ARRAY);
+      if (null == dimensionColumnPage.getPresentMeta()) {
+        FilterUtil.removeNullValues(dimensionColumnPage, bitSet,
+            CarbonCommonConstants.MEMBER_DEFAULT_VAL_ARRAY);
+      } else {
+        FilterUtil.removeNullValues(dimensionColumnPage, bitSet);
+      }
     }
     return bitSet;
   }
@@ -354,13 +370,12 @@ public class RowLevelRangeLessThanEqualFilterExecuterImpl extends RowLevelFilter
    */
   private BitSet setFilterdIndexToBitSetWithColumnIndex(
       DimensionColumnPage dimensionColumnPage, int numerOfRows,
-      byte[] defaultValue) {
+      Object defaultValue) {
     BitSet bitSet = new BitSet(numerOfRows);
     int start = 0;
     int last = 0;
     int skip = 0;
     int startIndex = 0;
-    byte[][] filterValues = this.filterRangeValues;
     //find the number of default values to skip the null value in case of direct dictionary
     if (null != defaultValue) {
       start = CarbonUtil
@@ -379,10 +394,10 @@ public class RowLevelRangeLessThanEqualFilterExecuterImpl extends RowLevelFilter
       }
       startIndex = skip;
     }
-    for (int i = 0; i < filterValues.length; i++) {
+    for (int i = 0; i < dimFilterRangeValues.length; i++) {
       start = CarbonUtil
           .getFirstIndexUsingBinarySearch(dimensionColumnPage, startIndex, numerOfRows - 1,
-              filterValues[i], true);
+              dimFilterRangeValues[i], true);
       if (start < 0) {
         start = -(start + 1);
         if (start >= numerOfRows) {
@@ -391,9 +406,7 @@ public class RowLevelRangeLessThanEqualFilterExecuterImpl extends RowLevelFilter
         // When negative value of start is returned from getFirstIndexUsingBinarySearch the Start
         // will be pointing to the next consecutive position. So compare it again and point to the
         // previous value returned from getFirstIndexUsingBinarySearch.
-        if (ByteUtil.compare(filterValues[i],
-            dimensionColumnPage.getChunkData(dimensionColumnPage.getInvertedIndex(start)))
-            < 0) {
+        if (dimensionColumnPage.compareTo(start, dimFilterRangeValues[i]) > 0) {
           start = start - 1;
         }
       }
@@ -422,9 +435,8 @@ public class RowLevelRangeLessThanEqualFilterExecuterImpl extends RowLevelFilter
    * @return BitSet.
    */
   private BitSet setFilterdIndexToBitSet(DimensionColumnPage dimensionColumnPage,
-      int numerOfRows, byte[] defaultValue) {
+      int numerOfRows, Object defaultValue) {
     BitSet bitSet = new BitSet(numerOfRows);
-    byte[][] filterValues = this.filterRangeValues;
     // binary search can only be applied if column is sorted
     if (isNaturalSorted) {
       int start = 0;
@@ -449,10 +461,10 @@ public class RowLevelRangeLessThanEqualFilterExecuterImpl extends RowLevelFilter
         }
         startIndex = skip;
       }
-      for (int k = 0; k < filterValues.length; k++) {
+      for (int k = 0; k < dimFilterRangeValues.length; k++) {
         start = CarbonUtil
             .getFirstIndexUsingBinarySearch(dimensionColumnPage, startIndex,
-                numerOfRows - 1, filterValues[k], true);
+                numerOfRows - 1, dimFilterRangeValues[k], true);
         if (start < 0) {
           start = -(start + 1);
           if (start >= numerOfRows) {
@@ -461,7 +473,7 @@ public class RowLevelRangeLessThanEqualFilterExecuterImpl extends RowLevelFilter
           // When negative value of start is returned from getFirstIndexUsingBinarySearch the Start
           // will be pointing to the next consecutive position. So compare it again and point to the
           // previous value returned from getFirstIndexUsingBinarySearch.
-          if (ByteUtil.compare(filterValues[k], dimensionColumnPage.getChunkData(start)) < 0) {
+          if (dimensionColumnPage.compareTo(start, dimFilterRangeValues[k]) > 0) {
             start = start - 1;
           }
         }
@@ -476,9 +488,9 @@ public class RowLevelRangeLessThanEqualFilterExecuterImpl extends RowLevelFilter
         }
       }
     } else {
-      for (int k = 0; k < filterValues.length; k++) {
+      for (int k = 0; k < dimFilterRangeValues.length; k++) {
         for (int i = 0; i < numerOfRows; i++) {
-          if (ByteUtil.compare(dimensionColumnPage.getChunkData(i), filterValues[k]) <= 0) {
+          if (dimensionColumnPage.compareTo(i, dimFilterRangeValues[k]) <= 0) {
             bitSet.set(i);
           }
         }

@@ -151,7 +151,7 @@ public class PrimitivePageStatsCollector implements ColumnPageStatsCollector, Si
 
   @Override
   public void updateNull(int rowId) {
-    long value = 0;
+    long value = 1;
     if (dataType == DataTypes.BOOLEAN || dataType == DataTypes.BYTE) {
       update((byte) value);
     } else if (dataType == DataTypes.SHORT) {
@@ -161,7 +161,7 @@ public class PrimitivePageStatsCollector implements ColumnPageStatsCollector, Si
     } else if (dataType == DataTypes.LONG || dataType == DataTypes.TIMESTAMP) {
       update(value);
     } else if (dataType == DataTypes.DOUBLE) {
-      update(0d);
+      update(1d);
     } else if (DataTypes.isDecimal(dataType)) {
       if (isFirst) {
         maxDecimal = zeroDecimal;

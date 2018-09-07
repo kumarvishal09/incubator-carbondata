@@ -14,22 +14,46 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package org.apache.carbondata.core.datastore.columnar;
 
-public interface IndexStorage<T> {
+public class PrimitiveColumnDataVO implements ColumnDataVo<Object> {
 
-  T getRowIdPage();
+  private Object column;
 
-  int getRowIdPageLengthInBytes();
+  private Short index;
 
-  T getRowIdRlePage();
+  PrimitiveColumnDataVO(Object column, short index) {
+    this.column = column;
+    this.index = index;
+  }
 
-  int getRowIdRlePageLengthInBytes();
+  @Override public boolean equals(Object obj) {
+    if (obj == null || getClass() != obj.getClass()) {
+      return false;
+    }
+    PrimitiveColumnDataVO o = (PrimitiveColumnDataVO) obj;
+    return column.equals(o.column) && index.equals(o.index);
+  }
 
-  byte[][] getDataPage();
+  @Override public int hashCode() {
+    return this.column.hashCode() + index.hashCode();
+  }
 
-  T getDataRlePage();
+  /**
+   * @return the index
+   */
+  public short getIndex() {
+    return index;
+  }
 
-  int getDataRlePageLengthInBytes();
+  @Override public int getLength() {
+    return 0;
+  }
+
+  /**
+   * @return the column
+   */
+  public Object getData() {
+    return column;
+  }
 }

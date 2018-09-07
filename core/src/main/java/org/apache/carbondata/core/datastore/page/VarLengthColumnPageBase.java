@@ -66,8 +66,8 @@ public abstract class VarLengthColumnPageBase extends ColumnPage {
 
   VarLengthColumnPageBase(TableSpec.ColumnSpec columnSpec, DataType dataType, int pageSize) {
     super(columnSpec, dataType, pageSize);
-    TableSpec.ColumnSpec spec = TableSpec.ColumnSpec
-        .newInstance(columnSpec.getFieldName(), DataTypes.INT, ColumnType.MEASURE);
+    TableSpec.MeasureSpec spec = TableSpec.MeasureSpec
+        .newInstance(columnSpec.getFieldName(), DataTypes.INT);
     try {
       rowOffset =
           ColumnPage.newPage(spec, DataTypes.INT, pageSize);
@@ -473,5 +473,9 @@ public abstract class VarLengthColumnPageBase extends ColumnPage {
       rowOffset.freeMemory();
       rowOffset = null;
     }
+  }
+
+  public ColumnPage getRowOffsetPage() {
+    return rowOffset;
   }
 }

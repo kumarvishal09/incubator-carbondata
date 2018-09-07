@@ -22,6 +22,7 @@ import java.io.DataOutputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
+import java.util.BitSet;
 import java.util.List;
 
 import org.apache.carbondata.common.logging.LogService;
@@ -90,11 +91,20 @@ public abstract class ColumnPageEncoder {
   }
 
   private void fillNullBitSet(ColumnPage inputPage, DataChunk2 dataChunk) {
+    BitSet nullBits = inputPage.getNullBits();
+    int pageSize = inputPage.getPageSize();
+    int cardinality = nullBits.cardinality();
+    boolean isNotNullBitSet = false;
+    if (((cardinality * 100) / pageSize) > 50) {
+      nullBits.flip(0, pageSize);
+      isNotNullBitSet = true;
+    }
     PresenceMeta presenceMeta = new PresenceMeta();
-    presenceMeta.setPresent_bit_streamIsSet(true);
+    presenceMeta.setPresent_bit_streamIsSet(isNotNullBitSet);
     Compressor compressor = CompressorFactory.getInstance().getCompressor();
     presenceMeta.setPresent_bit_stream(
-        compressor.compressByte(inputPage.getNullBits().toByteArray()));
+        compressor.compressByte(nullBits.toByteArray()));
+    presenceMeta.setRepresents_presence(isNotNullBitSet);
     dataChunk.setPresence(presenceMeta);
   }
 
@@ -103,7 +113,7 @@ public abstract class ColumnPageEncoder {
     dataChunk.setEncoder_meta(buildEncoderMeta(inputPage));
   }
 
-  private List<ByteBuffer> buildEncoderMeta(ColumnPage inputPage) throws IOException {
+  protected List<ByteBuffer> buildEncoderMeta(ColumnPage inputPage) throws IOException {
     ColumnPageEncoderMeta meta = getEncoderMeta(inputPage);
     List<ByteBuffer> metaDatas = new ArrayList<>();
     if (meta != null) {
@@ -119,7 +129,7 @@ public abstract class ColumnPageEncoder {
     dataChunk.setMin_max(buildMinMaxIndex(inputPage));
   }
 
-  private BlockletMinMaxIndex buildMinMaxIndex(ColumnPage inputPage) {
+  protected BlockletMinMaxIndex buildMinMaxIndex(ColumnPage inputPage) {
     BlockletMinMaxIndex index = new BlockletMinMaxIndex();
     byte[] bytes = CarbonUtil.getValueAsBytes(
         inputPage.getDataType(), inputPage.getStatistics().getMax());
@@ -162,8 +172,14 @@ public abstract class ColumnPageEncoder {
       throws IOException, MemoryException {
     ColumnPageEncoder pageEncoder = createCodecForDimension(page);
     if (pageEncoder == null) {
-      ColumnPageEncoder encoder = new DirectCompressCodec(DataTypes.BYTE_ARRAY).createEncoder(null);
-      return encoder.encode(page);
+      if (page.getColumnSpec().getColumnType() == ColumnType.COMPLEX_PRIMITIVE) {
+        return DefaultEncodingFactory.getInstance().createEncoder(page.getColumnSpec(), page, null)
+            .encode(page);
+      } else {
+        ColumnPageEncoder encoder =
+            new DirectCompressCodec(DataTypes.BYTE_ARRAY).createEncoder(null);
+        return encoder.encode(page);
+      }
     } else {
       LOGGER.debug("Encoder result ---> Source data type: " + pageEncoder.getEncoderMeta(page)
           .getColumnSpec().getSchemaDataType() + " Destination data type: " + pageEncoder
