@@ -31,6 +31,7 @@ import org.apache.carbondata.core.datastore.page.encoding.adaptive.AdaptiveFloat
 import org.apache.carbondata.core.datastore.page.encoding.adaptive.AdaptiveIntegralCodec;
 import org.apache.carbondata.core.datastore.page.encoding.compress.DirectCompressCodec;
 import org.apache.carbondata.core.datastore.page.encoding.dimension.legacy.HighCardDictDimensionIndexCodec;
+import org.apache.carbondata.core.datastore.page.encoding.dimension.legacy.PrimitiveTypeColumnCodec;
 import org.apache.carbondata.core.datastore.page.statistics.PrimitivePageStatsCollector;
 import org.apache.carbondata.core.datastore.page.statistics.SimpleStatsResult;
 import org.apache.carbondata.core.metadata.datatype.DataType;
@@ -45,8 +46,6 @@ public class DefaultEncodingFactory extends EncodingFactory {
   private static final int THREE_BYTES_MAX = (int) Math.pow(2, 23) - 1;
   private static final int THREE_BYTES_MIN = - THREE_BYTES_MAX - 1;
 
-  private static final boolean newWay = false;
-
   private static EncodingFactory encodingFactory = new DefaultEncodingFactory();
 
   public static EncodingFactory getInstance() {
@@ -57,8 +56,7 @@ public class DefaultEncodingFactory extends EncodingFactory {
   @Override
   public ColumnPageEncoder createEncoder(TableSpec.ColumnSpec columnSpec, ColumnPage inputPage) {
     // TODO: add log
-    if (columnSpec instanceof TableSpec.MeasureSpec
-        || columnSpec.getColumnType() == ColumnType.MEASURE) {
+    if (columnSpec instanceof TableSpec.MeasureSpec) {
       return createEncoderForMeasure(inputPage);
     } else {
         assert columnSpec instanceof TableSpec.DimensionSpec;
@@ -70,15 +68,15 @@ public class DefaultEncodingFactory extends EncodingFactory {
     Compressor compressor = CompressorFactory.getInstance().getCompressor();
     switch (dimensionSpec.getColumnType()) {
       case GLOBAL_DICTIONARY:
-        return new DictDimensionIndexCodec(
+        return new PrimitiveTypeColumnCodec(
             dimensionSpec.isInSortColumns(),
             dimensionSpec.isInSortColumns() && dimensionSpec.isDoInvertedIndex(),
-            compressor).createEncoder(null);
+            compressor, DataTypes.INT).createEncoder(null);
       case DIRECT_DICTIONARY:
-        return new DirectDictDimensionIndexCodec(
+        return new PrimitiveTypeColumnCodec(
             dimensionSpec.isInSortColumns(),
             dimensionSpec.isInSortColumns() && dimensionSpec.isDoInvertedIndex(),
-            compressor).createEncoder(null);
+            compressor, DataTypes.INT).createEncoder(null);
       case PLAIN_VALUE:
         return new HighCardDictDimensionIndexCodec(
             dimensionSpec.isInSortColumns(),

@@ -5,6 +5,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
+import org.apache.carbondata.core.datastore.TableSpec;
 import org.apache.carbondata.core.datastore.columnar.PageIndexGenerator;
 import org.apache.carbondata.core.datastore.columnar.PrimitivePageIndexGenerator;
 import org.apache.carbondata.core.datastore.compression.Compressor;
@@ -13,12 +14,18 @@ import org.apache.carbondata.core.datastore.page.encoding.ColumnPageEncoder;
 import org.apache.carbondata.core.datastore.page.encoding.DefaultEncodingFactory;
 import org.apache.carbondata.core.datastore.page.encoding.EncodedColumnPage;
 import org.apache.carbondata.core.memory.MemoryException;
+import org.apache.carbondata.core.metadata.datatype.DataType;
+import org.apache.carbondata.core.metadata.datatype.DataTypes;
 import org.apache.carbondata.format.Encoding;
 
 public class PrimitiveTypeColumnCodec extends IndexStorageCodec {
 
-  public PrimitiveTypeColumnCodec(boolean isSort, boolean isInvertedIndex, Compressor compressor) {
+  private DataType dataType;
+
+  public PrimitiveTypeColumnCodec(boolean isSort, boolean isInvertedIndex, Compressor compressor,
+      DataType dataType) {
     super(isSort, isInvertedIndex, compressor);
+    this.dataType = dataType;
   }
 
   @Override public String getName() {
@@ -36,9 +43,11 @@ public class PrimitiveTypeColumnCodec extends IndexStorageCodec {
         pageIndexGenerator =
             new PrimitivePageIndexGenerator(data, isSort, input.getDataType());
         ColumnPage adaptivePage;
+        TableSpec.MeasureSpec spec = TableSpec.MeasureSpec
+            .newInstance(input.getColumnSpec().getFieldName(), dataType);
         try {
           adaptivePage =
-              ColumnPage.newPage(input.getColumnSpec(), input.getDataType(), input.getPageSize());
+              ColumnPage.newPage(spec, dataType, input.getPageSize());
         } catch (MemoryException e) {
           throw new RuntimeException(e);
         }

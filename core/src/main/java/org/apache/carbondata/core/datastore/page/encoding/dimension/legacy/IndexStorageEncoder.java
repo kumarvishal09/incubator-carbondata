@@ -115,7 +115,7 @@ public abstract class IndexStorageEncoder extends ColumnPageEncoder {
     ColumnPage lengthPage =
         ColumnPage.newPage(columnSpec, DataTypes.INT, length.length);
     for (int i = 0; i < length.length ; i++) {
-      lengthPage.putInt(i, length[0]);
+      lengthPage.putData(i, length[0]);
     }
     return lengthPage;
   }
