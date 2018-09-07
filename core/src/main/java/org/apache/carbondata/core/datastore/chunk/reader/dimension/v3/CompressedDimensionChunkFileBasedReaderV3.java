@@ -274,15 +274,21 @@ public class CompressedDimensionChunkFileBasedReaderV3 extends AbstractChunkRead
     int[] invertedIndexes = new int[0];
     int[] invertedIndexesReverse = new int[0];
     dataPage = COMPRESSOR.unCompressByte(pageData.array(), offset, pageMetadata.data_page_length);
+    int length = dimensionChunksLength.get(rawColumnPage.getColumnIndex());
     offset += pageMetadata.data_page_length;
+    length+=pageMetadata.data_page_length;
     // if row id block is present then read the row id chunk and uncompress it
     if (hasEncoding(pageMetadata.encoders, Encoding.INVERTED_INDEX)) {
       invertedIndexes = CarbonUtil
           .getUnCompressColumnIndex(pageMetadata.rowid_page_length, pageData, offset);
       offset += pageMetadata.rowid_page_length;
+      length+=pageMetadata.rowid_page_length;
       // get the reverse index
       invertedIndexesReverse = getInvertedReverseIndex(invertedIndexes);
     }
+
+    int size =(int) (lastDimensionOffsets - (length + dimensionChunksOffset.get(0)));
+
     // if rle is applied then read the rle block chunk and then uncompress
     //then actual data based on rle block
     if (hasEncoding(pageMetadata.encoders, Encoding.RLE)) {

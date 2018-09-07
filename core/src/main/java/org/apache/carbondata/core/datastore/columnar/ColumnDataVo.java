@@ -16,44 +16,12 @@
  */
 package org.apache.carbondata.core.datastore.columnar;
 
-public class PrimitiveColumnDataVO implements ColumnDataVo<Object> {
+public interface ColumnDataVo<T> {
 
-  private Object column;
+  T getData();
 
-  private Short index;
+  short getIndex();
 
-  PrimitiveColumnDataVO(Object column, short index) {
-    this.column = column;
-    this.index = index;
-  }
+  int getLength();
 
-  @Override public boolean equals(Object obj) {
-    if (obj == null || getClass() != obj.getClass()) {
-      return false;
-    }
-    PrimitiveColumnDataVO o = (PrimitiveColumnDataVO) obj;
-    return column.equals(o.column) && index.equals(o.index);
-  }
-
-  @Override public int hashCode() {
-    return this.column.hashCode() + index.hashCode();
-  }
-
-  /**
-   * @return the index
-   */
-  public short getIndex() {
-    return index;
-  }
-
-  @Override public int getLength() {
-    return 0;
-  }
-
-  /**
-   * @return the column
-   */
-  public Object getData() {
-    return column;
-  }
 }

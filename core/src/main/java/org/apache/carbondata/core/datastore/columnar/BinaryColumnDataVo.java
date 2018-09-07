@@ -21,12 +21,12 @@ import java.util.Arrays;
 
 import org.apache.carbondata.core.util.ByteUtil;
 
-public class BinaryColumnDataVo implements Comparable<BinaryColumnDataVo> {
+public class BinaryColumnDataVo implements ColumnDataVo<byte[]> {
   private final int length;
 
   protected byte[] column;
 
-  private short index;
+  private Short index;
 
   BinaryColumnDataVo(byte[] column, short index, int length) {
     this.column = column;
@@ -37,7 +37,7 @@ public class BinaryColumnDataVo implements Comparable<BinaryColumnDataVo> {
   /**
    * @return the column
    */
-  public byte[] getColumn() {
+  public byte[] getData() {
     return column;
   }
 
@@ -52,19 +52,15 @@ public class BinaryColumnDataVo implements Comparable<BinaryColumnDataVo> {
     return length;
   }
 
-  @Override public int compareTo(BinaryColumnDataVo o) {
-    return ByteUtil.UnsafeComparer.INSTANCE.compareTo(column, o.column);
-  }
-
   @Override public boolean equals(Object obj) {
     if (obj == null || getClass() != obj.getClass()) {
       return false;
     }
     BinaryColumnDataVo o = (BinaryColumnDataVo)obj;
-    return Arrays.equals(column, o.column) && index == o.index;
+    return Arrays.equals(column, o.column) && index.equals(o.index);
   }
 
   @Override public int hashCode() {
-    return Arrays.hashCode(column) + new Integer(index).hashCode();
+    return Arrays.hashCode(column) + index.hashCode();
   }
 }

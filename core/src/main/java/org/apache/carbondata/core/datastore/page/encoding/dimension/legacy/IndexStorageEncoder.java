@@ -29,6 +29,7 @@ import org.apache.carbondata.core.datastore.page.encoding.ColumnPageEncoder;
 import org.apache.carbondata.core.datastore.page.encoding.ColumnPageEncoderMeta;
 import org.apache.carbondata.core.datastore.page.encoding.DefaultEncodingFactory;
 import org.apache.carbondata.core.datastore.page.encoding.EncodedColumnPage;
+import org.apache.carbondata.core.datastore.page.statistics.PrimitivePageStatsCollector;
 import org.apache.carbondata.core.memory.MemoryException;
 import org.apache.carbondata.core.metadata.datatype.DataTypes;
 import org.apache.carbondata.format.DataChunk2;
@@ -107,13 +108,16 @@ public abstract class IndexStorageEncoder extends ColumnPageEncoder {
     if(this.storeOffset) {
       dataChunk.setEncoder_meta(lengthEncodedPage.getPageMetadata().encoder_meta);
       dataChunk.getEncoders().addAll(lengthEncodedPage.getPageMetadata().getEncoders());
-      dataChunk.getEncoders().add(Encoding.INVERTED_INDEX);
+      dataChunk.lv_page_length = this.lengthEncodedPage.getEncodedData().array().length;
     }
+
   }
   
   private ColumnPage getLengthPage(int[] length, TableSpec.MeasureSpec columnSpec) throws MemoryException {
     ColumnPage lengthPage =
         ColumnPage.newPage(columnSpec, DataTypes.INT, length.length);
+    lengthPage
+        .setStatsCollector(PrimitivePageStatsCollector.newInstance(lengthPage.getDataType()));
     for (int i = 0; i < length.length ; i++) {
       lengthPage.putData(i, length[0]);
     }

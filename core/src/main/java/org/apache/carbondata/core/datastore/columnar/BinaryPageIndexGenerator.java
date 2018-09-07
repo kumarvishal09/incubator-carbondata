@@ -17,6 +17,9 @@
 package org.apache.carbondata.core.datastore.columnar;
 
 import java.util.Arrays;
+import java.util.Comparator;
+
+import org.apache.carbondata.core.util.ByteUtil;
 
 public class BinaryPageIndexGenerator extends PageIndexGenerator<byte[][]> {
 
@@ -28,8 +31,12 @@ public class BinaryPageIndexGenerator extends PageIndexGenerator<byte[][]> {
     this.dataPage = dataPage;
     this.length = length;
     if (isSortRequired) {
-      BinaryColumnDataVo[] dataWithRowId = createColumnWithRowId(dataPage, length);
-      Arrays.sort(dataWithRowId);
+      ColumnDataVo<byte[]>[] dataWithRowId = createColumnWithRowId(dataPage, length);
+      Arrays.sort(dataWithRowId, new Comparator<ColumnDataVo<byte[]>>() {
+        @Override public int compare(ColumnDataVo<byte[]> o1, ColumnDataVo<byte[]> o2) {
+          return ByteUtil.UnsafeComparer.INSTANCE.compareTo(o1.getData(), o2.getData());
+        }
+      });
       short[] rowIds = extractDataAndReturnRowId(dataWithRowId, dataPage);
       rleEncodeOnRowId(rowIds);
     } else {
@@ -45,18 +52,19 @@ public class BinaryPageIndexGenerator extends PageIndexGenerator<byte[][]> {
    * @return
    */
   private BinaryColumnDataVo[] createColumnWithRowId(byte[][] dataPage, int[] length) {
-    BinaryColumnDataVo[] columnWithIndexs = new BinaryColumnDataVo[dataPage.length];
-    for (short i = 0; i < columnWithIndexs.length; i++) {
-      columnWithIndexs[i] = new BinaryColumnDataVo(dataPage[i], i, length[i]);
+    BinaryColumnDataVo[] columnWithIndexe = new BinaryColumnDataVo[dataPage.length];
+    for (short i = 0; i < columnWithIndexe.length; i++) {
+      columnWithIndexe[i] = new BinaryColumnDataVo(dataPage[i], i, length[i]);
     }
-    return columnWithIndexs;
+    return columnWithIndexe;
   }
 
-  private short[] extractDataAndReturnRowId(BinaryColumnDataVo[] dataWithRowId, byte[][] dataPage) {
+  private short[] extractDataAndReturnRowId(ColumnDataVo<byte[]>[] dataWithRowId,
+      byte[][] dataPage) {
     short[] indexes = new short[dataWithRowId.length];
     for (int i = 0; i < indexes.length; i++) {
       indexes[i] = dataWithRowId[i].getIndex();
-      dataPage[i] = dataWithRowId[i].getColumn();
+      dataPage[i] = dataWithRowId[i].getData();
       length[i] = dataWithRowId[i].getLength();
     }
     this.dataPage = dataPage;
