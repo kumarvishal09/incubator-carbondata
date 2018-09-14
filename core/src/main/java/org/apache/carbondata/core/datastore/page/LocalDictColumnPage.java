@@ -64,9 +64,6 @@ public class LocalDictColumnPage extends ColumnPage {
    */
   private boolean isActualPageMemoryFreed;
 
-  private KeyGenerator keyGenerator;
-
-  private int[] dummyKey;
   /**
    * Create a new column page with input data type and page size.
    */
@@ -80,9 +77,6 @@ public class LocalDictColumnPage extends ColumnPage {
       pageLevelDictionary = new PageLevelDictionary(localDictionaryGenerator,
           actualDataColumnPage.getColumnSpec().getFieldName());
       this.encodedDataColumnPage = encodedColumnpage;
-      this.keyGenerator = KeyGeneratorFactory
-          .getKeyGenerator(new int[] { CarbonCommonConstants.LOCAL_DICTIONARY_MAX + 1 });
-      this.dummyKey = new int[1];
     } else {
       // else free the encoded column page memory as its of no use
       encodedColumnpage.freeMemory();
@@ -118,18 +112,13 @@ public class LocalDictColumnPage extends ColumnPage {
     if (null != pageLevelDictionary) {
       try {
         actualDataColumnPage.putBytes(rowId, bytes);
-        dummyKey[0] = pageLevelDictionary.getDictionaryValue(bytes);
-        encodedDataColumnPage.putBytes(rowId, keyGenerator.generateKey(dummyKey));
+        encodedDataColumnPage.putData(rowId, pageLevelDictionary.getDictionaryValue(bytes));
       } catch (DictionaryThresholdReachedException e) {
         LOGGER.warn("Local Dictionary threshold reached for the column: " + actualDataColumnPage
             .getColumnSpec().getFieldName() + ", " + e.getMessage());
         pageLevelDictionary = null;
         encodedDataColumnPage.freeMemory();
         encodedDataColumnPage = null;
-      } catch (KeyGenException e) {
-        LOGGER.error(e, "Unable to generate key for: " + actualDataColumnPage
-            .getColumnSpec().getFieldName());
-        throw new RuntimeException(e);
       }
     } else {
       actualDataColumnPage.putBytes(rowId, bytes);
@@ -325,5 +314,9 @@ public class LocalDictColumnPage extends ColumnPage {
 
   @Override public void convertValue(ColumnPageValueConverter codec) {
     throw new UnsupportedOperationException("Operation not supported");
+  }
+
+  public ColumnPage getLocalDictPage() {
+    return this.encodedDataColumnPage;
   }
 }

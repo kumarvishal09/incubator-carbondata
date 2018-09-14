@@ -95,11 +95,13 @@ public interface DimensionColumnPage {
    * @param compareValue value to compare
    * @return compare result
    */
-  int compareTo(int rowId, byte[] compareValue);
+  int compareTo(int rowId, Object compareValue);
 
   /**
    * below method will be used to free the allocated memory
    */
   void freeMemory();
+
+  boolean isAdaptiveEncoded();
 
 }

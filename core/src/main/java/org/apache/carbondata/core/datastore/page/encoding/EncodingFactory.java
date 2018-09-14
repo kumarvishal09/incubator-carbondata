@@ -22,6 +22,7 @@ import java.io.DataInputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.List;
+import java.util.Map;
 
 import org.apache.carbondata.core.datastore.ColumnType;
 import org.apache.carbondata.core.datastore.TableSpec;
@@ -59,7 +60,7 @@ public abstract class EncodingFactory {
    * Return new encoder for specified column
    */
   public abstract ColumnPageEncoder createEncoder(TableSpec.ColumnSpec columnSpec,
-      ColumnPage inputPage);
+      ColumnPage inputPage, Map<String, Object> encoderParameter);
 
   /**
    * Return new decoder based on encoder metadata read from file

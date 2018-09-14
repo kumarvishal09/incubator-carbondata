@@ -313,7 +313,7 @@ public class CarbonMetadataUtil {
     for (DataChunk2 dataChunk2 : dataChunksList) {
       pageOffsets.add(offset);
       length = dataChunk2.getData_page_length() + dataChunk2.getRle_page_length() +
-          dataChunk2.getRowid_page_length();
+          dataChunk2.getRowid_page_length() + dataChunk2.getLv_page_length();
       pageLengths.add(length);
       offset += length;
     }

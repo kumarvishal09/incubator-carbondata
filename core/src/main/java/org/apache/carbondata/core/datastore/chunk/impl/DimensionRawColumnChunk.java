@@ -31,6 +31,7 @@ import org.apache.carbondata.core.datastore.page.ColumnPage;
 import org.apache.carbondata.core.datastore.page.encoding.ColumnPageDecoder;
 import org.apache.carbondata.core.datastore.page.encoding.DefaultEncodingFactory;
 import org.apache.carbondata.core.memory.MemoryException;
+import org.apache.carbondata.core.scan.executor.util.QueryUtil;
 import org.apache.carbondata.core.scan.result.vector.CarbonDictionary;
 import org.apache.carbondata.core.scan.result.vector.impl.CarbonDictionaryImpl;
 import org.apache.carbondata.format.Encoding;
@@ -163,30 +164,78 @@ public class DimensionRawColumnChunk extends AbstractRawColumnChunk {
   private CarbonDictionary getDictionary(LocalDictionaryChunk localDictionaryChunk)
       throws IOException, MemoryException {
     if (null != localDictionaryChunk) {
-      List<Encoding> encodings = localDictionaryChunk.getDictionary_meta().getEncoders();
-      List<ByteBuffer> encoderMetas = localDictionaryChunk.getDictionary_meta().getEncoder_meta();
-      ColumnPageDecoder decoder =
-          DefaultEncodingFactory.getInstance().createDecoder(encodings, encoderMetas);
-      ColumnPage decode = decoder.decode(localDictionaryChunk.getDictionary_data(), 0,
-          localDictionaryChunk.getDictionary_data().length);
+      byte[][] dictionaryPage = null;
       BitSet usedDictionary = BitSet.valueOf(CompressorFactory.getInstance().getCompressor()
           .unCompressByte(localDictionaryChunk.getDictionary_values()));
       int length = usedDictionary.length();
-      int index = 0;
-      byte[][] dictionary = new byte[length][];
-      for (int i = 0; i < length; i++) {
-        if (usedDictionary.get(i)) {
-          dictionary[i] = decode.getBytes(index++);
-        } else {
-          dictionary[i] = null;
+      byte[][] dictionary = null;
+      if (localDictionaryChunk.getDictionary_meta().getEncoders().size() <= 1) {
+        dictionaryPage = getDictionaryPage(localDictionaryChunk);
+        int index = 0;
+        dictionary = new byte[length][];
+        for (int i = 0; i < length; i++) {
+          if (usedDictionary.get(i)) {
+            dictionary[i] = dictionaryPage[index++];
+          } else {
+            dictionary[i] = null;
+          }
+        }
+      } else {
+        int offset = 0;
+        int lv_lengthSize = localDictionaryChunk.dictionary_data.getInt(offset);
+        offset += CarbonCommonConstants.INT_SIZE_IN_BYTE;
+        int[] rowLength = QueryUtil.getDataLengthArray(localDictionaryChunk.dictionary_data, offset,
+            localDictionaryChunk.getDictionary_meta().getEncoders(), lv_lengthSize,
+            localDictionaryChunk.getDictionary_meta().getEncoder_meta());
+        offset += lv_lengthSize;
+        byte[] bytes = CompressorFactory.getInstance().getCompressor()
+            .unCompressByte(localDictionaryChunk.getDictionary_data(), offset,
+                localDictionaryChunk.getDictionary_data().length - offset);
+        dictionary = new byte[length][];
+        int dicOffset = 0;
+        int dataOffset = 0;
+        for (int i = 0; i < length; i++) {
+          if (usedDictionary.get(i)) {
+            dictionary[i] = new byte[rowLength[dicOffset]];
+            System.arraycopy(bytes, dataOffset, dictionary[i], 0, rowLength[dicOffset]);
+            dataOffset+=rowLength[dicOffset];
+            dicOffset++;
+          } else {
+            dictionary[i] = null;
+          }
         }
       }
-      decode.freeMemory();
       // as dictionary values starts from 1 setting null default value
       dictionary[1] = CarbonCommonConstants.MEMBER_DEFAULT_VAL_ARRAY;
       return new CarbonDictionaryImpl(dictionary, usedDictionary.cardinality());
     }
     return null;
+  }
+
+  private byte[][] getDictionaryPage(LocalDictionaryChunk localDictionaryChunk)
+      throws IOException, MemoryException {
+    List<Encoding> encodings = localDictionaryChunk.getDictionary_meta().getEncoders();
+    List<ByteBuffer> encoderMetas = localDictionaryChunk.getDictionary_meta().getEncoder_meta();
+    ColumnPageDecoder decoder =
+        DefaultEncodingFactory.getInstance().createDecoder(encodings, encoderMetas);
+    ColumnPage decode = decoder.decode(localDictionaryChunk.getDictionary_data(), 0,
+        localDictionaryChunk.getDictionary_data().length);
+    byte[][] byteArrayPage = decode.getByteArrayPage();
+    decode.freeMemory();
+    return byteArrayPage;
+  }
+
+  private byte[][] getDictionaryPage1(LocalDictionaryChunk localDictionaryChunk)
+      throws IOException, MemoryException {
+    List<Encoding> encodings = localDictionaryChunk.getDictionary_meta().getEncoders();
+    List<ByteBuffer> encoderMetas = localDictionaryChunk.getDictionary_meta().getEncoder_meta();
+    ColumnPageDecoder decoder =
+        DefaultEncodingFactory.getInstance().createDecoder(encodings, encoderMetas);
+    ColumnPage decode = decoder.decode(localDictionaryChunk.getDictionary_data(), 0,
+        localDictionaryChunk.getDictionary_data().length);
+    byte[][] byteArrayPage = decode.getByteArrayPage();
+    decode.freeMemory();
+    return byteArrayPage;
   }
 
 }

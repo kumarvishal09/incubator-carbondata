@@ -426,8 +426,8 @@ public final class CarbonUtil {
    * @param compareValue
    * @return the compareValue's range index in the dimColumnDataChunk
    */
-  public static int[] getRangeIndexUsingBinarySearch(DimensionColumnPage dimColumnDataChunk, int low, int high, byte[] compareValue) {
-
+  public static int[] getRangeIndexUsingBinarySearch(DimensionColumnPage dimColumnDataChunk,
+      int low, int high, byte[] compareValue) {
     int[] rangeIndex = new int[2];
     int cmpResult = 0;
     while (high >= low) {

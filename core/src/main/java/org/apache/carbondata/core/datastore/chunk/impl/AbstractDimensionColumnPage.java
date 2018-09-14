@@ -76,9 +76,9 @@ public abstract class AbstractDimensionColumnPage implements DimensionColumnPage
    * @param compareValue value to compare
    * @return compare result
    */
-  @Override public int compareTo(int rowId, byte[] compareValue) {
+  @Override public int compareTo(int rowId, Object compareValue) {
     // TODO Auto-generated method stub
-    return dataChunkStore.compareTo(rowId, compareValue);
+    return dataChunkStore.compareTo(rowId, (byte[])compareValue);
   }
 
   /**
@@ -97,4 +97,9 @@ public abstract class AbstractDimensionColumnPage implements DimensionColumnPage
   @Override public boolean isNoDicitionaryColumn() {
     return false;
   }
+
+  @Override public boolean isAdaptiveEncoded() {
+    return false;
+  }
+
 }

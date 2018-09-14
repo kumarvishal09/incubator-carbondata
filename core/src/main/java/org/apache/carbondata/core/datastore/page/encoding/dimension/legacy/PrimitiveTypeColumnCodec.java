@@ -13,6 +13,8 @@ import org.apache.carbondata.core.datastore.page.ColumnPage;
 import org.apache.carbondata.core.datastore.page.encoding.ColumnPageEncoder;
 import org.apache.carbondata.core.datastore.page.encoding.DefaultEncodingFactory;
 import org.apache.carbondata.core.datastore.page.encoding.EncodedColumnPage;
+import org.apache.carbondata.core.datastore.page.statistics.PrimitivePageStatsCollector;
+import org.apache.carbondata.core.keygenerator.KeyGenerator;
 import org.apache.carbondata.core.memory.MemoryException;
 import org.apache.carbondata.core.metadata.datatype.DataType;
 import org.apache.carbondata.core.metadata.datatype.DataTypes;
@@ -33,49 +35,43 @@ public class PrimitiveTypeColumnCodec extends IndexStorageCodec {
   }
 
   @Override
-  public ColumnPageEncoder createEncoder(Map<String, String> parameter) {
-    return new IndexStorageEncoder(false) {
-
+  public ColumnPageEncoder createEncoder(Map<String, Object> parameter) {
+    return new IndexStorageEncoder(false, null == parameter ?
+        null :
+        (parameter.get("keygenerator") == null ?
+            null :
+            (KeyGenerator) parameter.get("keygenerator"))) {
       @Override
       protected void encodeIndexStorage(ColumnPage input) {
+        ColumnPage actualPage =
+            !input.isLocalDictGeneratedPage() ? input : input.getLocalDictPage();
         PageIndexGenerator<Object[]> pageIndexGenerator;
-        Object[] data = input.getPageBasedOnDataType();
+        Object[] data = actualPage.getPageBasedOnDataType();
         pageIndexGenerator =
-            new PrimitivePageIndexGenerator(data, isSort, input.getDataType());
+            new PrimitivePageIndexGenerator(data, isSort, actualPage.getDataType());
         ColumnPage adaptivePage;
         TableSpec.MeasureSpec spec = TableSpec.MeasureSpec
-            .newInstance(input.getColumnSpec().getFieldName(), dataType);
+            .newInstance(actualPage.getColumnSpec().getFieldName(), dataType);
         try {
           adaptivePage =
-              ColumnPage.newPage(spec, dataType, input.getPageSize());
+              ColumnPage.newPage(spec, dataType, actualPage.getPageSize());
         } catch (MemoryException e) {
           throw new RuntimeException(e);
         }
         Object[] dataPage = pageIndexGenerator.getDataPage();
+        adaptivePage.setStatsCollector(PrimitivePageStatsCollector.newInstance(dataType));
         for (int i = 0; i < dataPage.length; i++) {
           adaptivePage.putData(i, dataPage[i]);
         }
-        EncodedColumnPage encode;
         try {
-          encode = DefaultEncodingFactory.getInstance()
-              .createEncoder(input.getColumnSpec(), adaptivePage).encode(adaptivePage);
+          this.encodedColumnPage = DefaultEncodingFactory.getInstance()
+              .createEncoder(spec, adaptivePage, null).encode(adaptivePage);
         } catch (IOException | MemoryException e) {
           throw new RuntimeException(e);
         }
-        super.compressedDataPage = encode.getEncodedData().array();
+        adaptivePage.freeMemory();
+        super.compressedDataPage = encodedColumnPage.getEncodedData().array();
         super.pageIndexGenerator = pageIndexGenerator;
-      }
-
-      @Override
-      protected List<Encoding> getEncodingList() {
-        List<Encoding> encodings = new ArrayList<>();
-        if (pageIndexGenerator.getRowIdPageLengthInBytes() > 0) {
-          encodings.add(Encoding.INVERTED_INDEX);
-        }
-        if (pageIndexGenerator.getDataRlePageLengthInBytes() > 0) {
-          encodings.add(Encoding.RLE);
-        }
-        return encodings;
       }
     };
   }

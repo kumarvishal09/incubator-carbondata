@@ -29,6 +29,7 @@ import org.apache.carbondata.core.datastore.compression.CompressorFactory;
 import org.apache.carbondata.core.datastore.page.encoding.ColumnPageEncoderMeta;
 import org.apache.carbondata.core.datastore.page.encoding.bool.BooleanConvert;
 import org.apache.carbondata.core.datastore.page.statistics.ColumnPageStatsCollector;
+import org.apache.carbondata.core.datastore.page.statistics.PrimitivePageStatsCollector;
 import org.apache.carbondata.core.datastore.page.statistics.SimpleStatsResult;
 import org.apache.carbondata.core.localdictionary.PageLevelDictionary;
 import org.apache.carbondata.core.localdictionary.generator.LocalDictionaryGenerator;
@@ -62,6 +63,8 @@ public abstract class ColumnPage {
 
   // statistics collector for this column page
   protected ColumnPageStatsCollector statsCollector;
+
+  private boolean isNullBitset;
 
   protected static final boolean unsafe = Boolean.parseBoolean(CarbonProperties.getInstance()
       .getProperty(CarbonCommonConstants.ENABLE_UNSAFE_COLUMN_PAGE,
@@ -164,15 +167,21 @@ public abstract class ColumnPage {
 
   public static ColumnPage newLocalDictPage(TableSpec.ColumnSpec columnSpec, DataType dataType,
       int pageSize, LocalDictionaryGenerator localDictionaryGenerator) throws MemoryException {
+    ColumnPage encodedColumnPage;
+    TableSpec.MeasureSpec encodedSpec =
+        TableSpec.MeasureSpec.newInstance(columnSpec.getFieldName(), DataTypes.INT);
+    ColumnPageStatsCollector primitivePageStatsCollector =
+        PrimitivePageStatsCollector.newInstance(DataTypes.INT);
     if (unsafe) {
+      encodedColumnPage = new UnsafeFixLengthColumnPage(encodedSpec, DataTypes.INT, pageSize);
+      encodedColumnPage.setStatsCollector(primitivePageStatsCollector);
       return new LocalDictColumnPage(new UnsafeVarLengthColumnPage(columnSpec, dataType, pageSize),
-          new UnsafeFixLengthColumnPage(columnSpec, DataTypes.BYTE_ARRAY, pageSize,
-              CarbonCommonConstants.LOCAL_DICT_ENCODED_BYTEARRAY_SIZE),
-          localDictionaryGenerator);
+          encodedColumnPage, localDictionaryGenerator);
     } else {
+      encodedColumnPage = new SafeFixLengthColumnPage(encodedSpec, DataTypes.INT, pageSize);
+      encodedColumnPage.setStatsCollector(primitivePageStatsCollector);
       return new LocalDictColumnPage(new SafeVarLengthColumnPage(columnSpec, dataType, pageSize),
-          new SafeFixLengthColumnPage(columnSpec, DataTypes.BYTE_ARRAY, pageSize),
-          localDictionaryGenerator);
+          encodedColumnPage, localDictionaryGenerator);
     }
   }
 
@@ -512,7 +521,7 @@ public abstract class ColumnPage {
     } else if (DataTypes.isDecimal(dataType)) {
       putDecimal(rowId, BigDecimal.ZERO);
     } else {
-      throw new IllegalArgumentException("unsupported data type: " + dataType);
+      putBytes(rowId, new byte[0]);
     }
   }
 
@@ -820,8 +829,16 @@ public abstract class ColumnPage {
     return nullBitSet;
   }
 
+  public boolean isNullBitset(){
+    return isNullBitset;
+  }
+
   public void setNullBits(BitSet nullBitSet) {
     this.nullBitSet = nullBitSet;
+  }
+
+  public void setIsNullBitset(boolean isNullBitset) {
+    this.isNullBitset = isNullBitset;
   }
 
   public TableSpec.ColumnSpec getColumnSpec() {
@@ -845,6 +862,10 @@ public abstract class ColumnPage {
   }
 
   public ColumnPage getRowOffsetPage() {
+    throw new UnsupportedOperationException("Operation not supported");
+  }
+
+  public ColumnPage getLocalDictPage() {
     throw new UnsupportedOperationException("Operation not supported");
   }
 

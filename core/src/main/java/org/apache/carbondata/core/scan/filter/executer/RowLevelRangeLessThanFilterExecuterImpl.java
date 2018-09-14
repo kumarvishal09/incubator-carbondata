@@ -374,7 +374,7 @@ public class RowLevelRangeLessThanFilterExecuterImpl extends RowLevelFilterExecu
         }
       } else {
         // as start will be last index of null value inclusive
-        // so adding 1 to skip last null value
+        // so adding 1 to skip last null valueh
         skip = start + 1;
       }
       startIndex = skip;
@@ -491,7 +491,7 @@ public class RowLevelRangeLessThanFilterExecuterImpl extends RowLevelFilterExecu
     } else {
       for (int k = 0; k < filterValues.length; k++) {
         for (int i = 0; i < numerOfRows; i++) {
-          if (ByteUtil.compare(dimensionColumnPage.getChunkData(i), filterValues[k]) < 0) {
+          if(dimensionColumnPage.compareTo(i, filterValues[k])<0) {
             bitSet.set(i);
           }
         }

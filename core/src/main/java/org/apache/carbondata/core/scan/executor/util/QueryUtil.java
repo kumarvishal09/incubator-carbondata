@@ -17,6 +17,7 @@
 package org.apache.carbondata.core.scan.executor.util;
 
 import java.io.IOException;
+import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.BitSet;
@@ -36,8 +37,12 @@ import org.apache.carbondata.core.cache.dictionary.DictionaryColumnUniqueIdentif
 import org.apache.carbondata.core.constants.CarbonCommonConstants;
 import org.apache.carbondata.core.datastore.compression.Compressor;
 import org.apache.carbondata.core.datastore.compression.CompressorFactory;
+import org.apache.carbondata.core.datastore.page.ColumnPage;
+import org.apache.carbondata.core.datastore.page.encoding.ColumnPageDecoder;
+import org.apache.carbondata.core.datastore.page.encoding.DefaultEncodingFactory;
 import org.apache.carbondata.core.keygenerator.KeyGenException;
 import org.apache.carbondata.core.keygenerator.KeyGenerator;
+import org.apache.carbondata.core.memory.MemoryException;
 import org.apache.carbondata.core.metadata.AbsoluteTableIdentifier;
 import org.apache.carbondata.core.metadata.CarbonMetadata;
 import org.apache.carbondata.core.metadata.ColumnIdentifier;
@@ -59,6 +64,7 @@ import org.apache.carbondata.core.scan.filter.resolver.FilterResolverIntf;
 import org.apache.carbondata.core.scan.model.ProjectionDimension;
 import org.apache.carbondata.core.scan.model.ProjectionMeasure;
 import org.apache.carbondata.core.util.CarbonUtil;
+import org.apache.carbondata.format.DataChunk2;
 
 import org.apache.commons.lang3.ArrayUtils;
 
@@ -729,5 +735,40 @@ public class QueryUtil {
     } else {
       return new BitSet(1);
     }
+  }
+
+  public static int[] getBinaryDataOffsets(ByteBuffer data, int offset,
+      List<org.apache.carbondata.format.Encoding> encodingList, int lv_page_length,
+      List<ByteBuffer> encoder_meta) throws IOException, MemoryException {
+    int[] intPage = getDataLengthArray(data, offset, encodingList, lv_page_length, encoder_meta);
+    int[] offsetPage = new int[intPage.length + 1];
+    offsetPage[0] = 0;
+    int currentOffset = intPage[0];
+    for (int i = 1; i < offsetPage.length - 1; i++) {
+      offsetPage[i] = currentOffset;
+      currentOffset += intPage[i];
+    }
+    offsetPage[offsetPage.length - 1] = currentOffset;
+    return offsetPage;
+  }
+
+  private static ColumnPage decodeData(List<org.apache.carbondata.format.Encoding> encodings,
+      ByteBuffer pageData, int offset, int length, boolean isLVEncoded,
+      List<ByteBuffer> encoderMetas) throws IOException, MemoryException {
+    ColumnPageDecoder decoder =
+        DefaultEncodingFactory.getInstance().createDecoder(encodings, encoderMetas);
+    return decoder.decode(pageData.array(), offset, length, isLVEncoded);
+  }
+
+  public static int[] getDataLengthArray(ByteBuffer data, int offset,
+      List<org.apache.carbondata.format.Encoding> encodingList, int lv_page_length,
+      List<ByteBuffer> encoder_meta) throws IOException, MemoryException {
+    List<org.apache.carbondata.format.Encoding> encodings = new ArrayList<>();
+    encodings.add(encodingList.get(1));
+    ColumnPage columnPage =
+        decodeData(encodings, data, offset, lv_page_length, false, encoder_meta);
+    int[] intPage = columnPage.getIntPage();
+    columnPage.freeMemory();
+    return intPage;
   }
 }

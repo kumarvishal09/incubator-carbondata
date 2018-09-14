@@ -37,7 +37,7 @@ object CarbonSessionExample {
       s"$rootPath/examples/spark2/src/main/resources/log4j.properties")
 
     CarbonProperties.getInstance()
-      .addProperty(CarbonCommonConstants.ENABLE_QUERY_STATISTICS, "true")
+      .addProperty(CarbonCommonConstants.ENABLE_QUERY_STATISTICS, "false")
     val spark = ExampleUtils.createCarbonSession("CarbonSessionExample")
     spark.sparkContext.setLogLevel("INFO")
     exampleBody(spark)
@@ -48,10 +48,11 @@ object CarbonSessionExample {
 
     val rootPath = new File(this.getClass.getResource("/").getPath
                             + "../../../..").getCanonicalPath
-//    spark.sql("drop table if exists a")
-//    spark.sql("create table a (a2 string) stored by 'carbondata'")
-//    spark.sql("insert into a values ('vishal')")
+    //'local_dictionary_enable'='true'
+//tblproperties('dictionary_include'='a2')
+    spark.sql("drop table if exists a")
+    spark.sql("create table a (a2 string) stored by 'carbondata'")
+    spark.sql("insert into a values ('vishal')")
     spark.sql("select * from a").show()
-//
   }
 }

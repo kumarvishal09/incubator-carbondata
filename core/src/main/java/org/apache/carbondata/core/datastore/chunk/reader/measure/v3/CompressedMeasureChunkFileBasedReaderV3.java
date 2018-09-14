@@ -200,6 +200,7 @@ public class CompressedMeasureChunkFileBasedReaderV3 extends AbstractMeasureChun
         dataChunk3.getPage_offset().get(pageNumber);
     ColumnPage decodedPage = decodeMeasure(pageMetadata, rawColumnChunk.getRawData(), offset);
     decodedPage.setNullBits(QueryUtil.getNullBitSet(pageMetadata.presence));
+    decodedPage.setIsNullBitset(pageMetadata.presence.represents_presence);
     return decodedPage;
   }
 

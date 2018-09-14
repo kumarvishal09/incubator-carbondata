@@ -18,6 +18,7 @@
 package org.apache.carbondata.core.datastore.page.encoding;
 
 import java.math.BigDecimal;
+import java.util.Map;
 
 import org.apache.carbondata.core.datastore.ColumnType;
 import org.apache.carbondata.core.datastore.TableSpec;
@@ -54,35 +55,44 @@ public class DefaultEncodingFactory extends EncodingFactory {
   }
 
   @Override
-  public ColumnPageEncoder createEncoder(TableSpec.ColumnSpec columnSpec, ColumnPage inputPage) {
+  public ColumnPageEncoder createEncoder(TableSpec.ColumnSpec columnSpec, ColumnPage inputPage,
+      Map<String, Object> encoderParameter) {
     // TODO: add log
     if (columnSpec instanceof TableSpec.MeasureSpec) {
       return createEncoderForMeasure(inputPage);
     } else {
         assert columnSpec instanceof TableSpec.DimensionSpec;
-        return createEncoderForDimensionLegacy((TableSpec.DimensionSpec) columnSpec);
+      return createEncoderForDimensionLegacy((TableSpec.DimensionSpec) columnSpec,
+          encoderParameter, inputPage);
     }
   }
 
-  private ColumnPageEncoder createEncoderForDimensionLegacy(TableSpec.DimensionSpec dimensionSpec) {
+  private ColumnPageEncoder createEncoderForDimensionLegacy(TableSpec.DimensionSpec dimensionSpec,
+      Map<String, Object> encoderParameter, ColumnPage inputPage) {
     Compressor compressor = CompressorFactory.getInstance().getCompressor();
     switch (dimensionSpec.getColumnType()) {
       case GLOBAL_DICTIONARY:
         return new PrimitiveTypeColumnCodec(
             dimensionSpec.isInSortColumns(),
             dimensionSpec.isInSortColumns() && dimensionSpec.isDoInvertedIndex(),
-            compressor, DataTypes.INT).createEncoder(null);
+            compressor, DataTypes.INT).createEncoder(encoderParameter);
       case DIRECT_DICTIONARY:
         return new PrimitiveTypeColumnCodec(
             dimensionSpec.isInSortColumns(),
             dimensionSpec.isInSortColumns() && dimensionSpec.isDoInvertedIndex(),
-            compressor, DataTypes.INT).createEncoder(null);
+            compressor, DataTypes.INT).createEncoder(encoderParameter);
       case PLAIN_VALUE:
-        return new HighCardDictDimensionIndexCodec(
-            dimensionSpec.isInSortColumns(),
-            dimensionSpec.isInSortColumns() && dimensionSpec.isDoInvertedIndex(),
-            dimensionSpec.getSchemaDataType() == DataTypes.VARCHAR,
-            compressor).createEncoder(null);
+        if(!inputPage.isLocalDictGeneratedPage()) {
+          return new HighCardDictDimensionIndexCodec(dimensionSpec.isInSortColumns(),
+              dimensionSpec.isInSortColumns() && dimensionSpec.isDoInvertedIndex(),
+              dimensionSpec.getSchemaDataType() == DataTypes.VARCHAR, compressor)
+              .createEncoder(null);
+        } else {
+          return new PrimitiveTypeColumnCodec(
+              dimensionSpec.isInSortColumns(),
+              dimensionSpec.isInSortColumns() && dimensionSpec.isDoInvertedIndex(),
+              compressor, DataTypes.INT).createEncoder(null);
+        }
       default:
         throw new RuntimeException("unsupported dimension type: " +
             dimensionSpec.getColumnType());

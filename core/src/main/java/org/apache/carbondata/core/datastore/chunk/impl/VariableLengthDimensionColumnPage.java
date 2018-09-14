@@ -33,7 +33,7 @@ public class VariableLengthDimensionColumnPage extends AbstractDimensionColumnPa
    */
   public VariableLengthDimensionColumnPage(byte[] dataChunks, int[] invertedIndex,
       int[] invertedIndexReverse, int numberOfRows, DimensionStoreType dimStoreType,
-      CarbonDictionary dictionary) {
+      CarbonDictionary dictionary, int[] offset) {
     boolean isExplicitSorted = isExplicitSorted(invertedIndex);
     long totalSize = 0;
     switch (dimStoreType) {
@@ -49,12 +49,17 @@ public class VariableLengthDimensionColumnPage extends AbstractDimensionColumnPa
                 numberOfRows * CarbonCommonConstants.INT_SIZE_IN_BYTE)) :
             (dataChunks.length + (numberOfRows * CarbonCommonConstants.INT_SIZE_IN_BYTE));
         break;
+      case LV_STORE:
+        totalSize = null != invertedIndex ?
+            (dataChunks.length + (2 * numberOfRows * CarbonCommonConstants.INT_SIZE_IN_BYTE)) :
+            dataChunks.length;
+        break;
       default:
         throw new UnsupportedOperationException("Invalidate dimension store type");
     }
     dataChunkStore = DimensionChunkStoreFactory.INSTANCE
         .getDimensionChunkStore(0, isExplicitSorted, numberOfRows, totalSize, dimStoreType,
-            dictionary);
+            dictionary, offset);
     dataChunkStore.putArray(invertedIndex, invertedIndexReverse, dataChunks);
   }
 

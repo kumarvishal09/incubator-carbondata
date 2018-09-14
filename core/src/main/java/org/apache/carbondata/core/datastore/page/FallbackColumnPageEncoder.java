@@ -72,7 +72,7 @@ public class FallbackColumnPageEncoder implements Callable<FallbackEncodedColumn
         // for primitive column
         ColumnPageEncoder columnPageEncoder = DefaultEncodingFactory.getInstance()
             .createEncoder(encodedColumnPage.getActualPage().getColumnSpec(),
-                encodedColumnPage.getActualPage());
+                encodedColumnPage.getActualPage(), null);
         newEncodedColumnPage = columnPageEncoder.encode(encodedColumnPage.getActualPage());
     }
     FallbackEncodedColumnPage fallbackEncodedColumnPage =

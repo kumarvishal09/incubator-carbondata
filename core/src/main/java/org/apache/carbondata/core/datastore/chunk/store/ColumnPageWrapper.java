@@ -43,7 +43,6 @@ public class ColumnPageWrapper implements DimensionColumnPage {
     this.columnPage = columnPage;
     this.localDictionary = localDictionary;
     this.isAdaptiveComplexPrimitivePage = isAdaptiveComplexPrimitivePage;
-
   }
 
   @Override
@@ -157,7 +156,7 @@ public class ColumnPageWrapper implements DimensionColumnPage {
   }
 
   @Override
-  public int compareTo(int rowId, byte[] compareValue) {
+  public int compareTo(int rowId, Object compareValue) {
     throw new UnsupportedOperationException("internal error");
   }
 

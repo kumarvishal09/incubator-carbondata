@@ -47,8 +47,8 @@ public class HighCardDictDimensionIndexCodec extends IndexStorageCodec {
   }
 
   @Override
-  public ColumnPageEncoder createEncoder(Map<String, String> parameter) {
-    return new IndexStorageEncoder(true) {
+  public ColumnPageEncoder createEncoder(Map<String, Object> parameter) {
+    return new IndexStorageEncoder(true, null) {
 
       @Override
       protected void encodeIndexStorage(ColumnPage input) {
@@ -64,20 +64,6 @@ public class HighCardDictDimensionIndexCodec extends IndexStorageCodec {
         byte[] flattened = ByteUtil.flatten(pageIndexGenerator.getDataPage());
         super.compressedDataPage = compressor.compressByte(flattened);
         super.pageIndexGenerator = pageIndexGenerator;
-      }
-
-      @Override
-      protected List<Encoding> getEncodingList() {
-        List<Encoding> encodings = new ArrayList<>();
-        if (isVarcharType) {
-          encodings.add(Encoding.DIRECT_COMPRESS_VARCHAR);
-        } else if (pageIndexGenerator.getRowIdPageLengthInBytes() > 0) {
-          encodings.add(Encoding.INVERTED_INDEX);
-        }
-        if (pageIndexGenerator.getDataRlePageLengthInBytes() > 0) {
-          encodings.add(Encoding.RLE);
-        }
-        return encodings;
       }
     };
   }

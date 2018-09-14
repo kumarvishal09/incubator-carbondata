@@ -64,4 +64,6 @@ public interface DirectDictionaryGenerator {
    */
   DataType getReturnType();
 
+
+
 }

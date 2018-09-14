@@ -138,7 +138,25 @@ public class LazyColumnPage extends ColumnPage {
 
   @Override
   public int[] getIntPage() {
-    throw new UnsupportedOperationException("internal error");
+    int[] page = new int[pageSize];
+    if (dataType == DataTypes.BYTE) {
+      for (int i = 0; i < pageSize; i++) {
+        page[i] = (int)converter.decodeLong(columnPage.getByte(i));
+      }
+    } else if (dataType == DataTypes.SHORT) {
+      for (int i = 0; i < pageSize; i++) {
+        page[i] = (int)converter.decodeLong(columnPage.getShort(i));
+      }
+    } else if (dataType == DataTypes.SHORT_INT) {
+      for (int i = 0; i < pageSize; i++) {
+        page[i] = (int)converter.decodeLong(columnPage.getShortInt(i));
+      }
+    } else if (dataType == DataTypes.INT) {
+      for (int i = 0; i < pageSize; i++) {
+        page[i] = (int)converter.decodeLong(columnPage.getInt(i));
+      }
+    }
+    return page;
   }
 
   @Override
@@ -293,6 +311,17 @@ public class LazyColumnPage extends ColumnPage {
 
   @Override
   public int getInt(int rowId) {
-    throw new UnsupportedOperationException("internal error");
+    DataType dataType = columnPage.getDataType();
+    if (dataType == DataTypes.BOOLEAN || dataType == DataTypes.BYTE) {
+      return (int)converter.decodeLong(columnPage.getByte(rowId));
+    } else if (dataType == DataTypes.SHORT) {
+      return (int)converter.decodeLong(columnPage.getShort(rowId));
+    } else if (dataType == DataTypes.SHORT_INT) {
+      return (int)converter.decodeLong(columnPage.getShortInt(rowId));
+    } else if (dataType == DataTypes.INT) {
+      return (int)converter.decodeLong(columnPage.getInt(rowId));
+    } else {
+      throw new RuntimeException("internal error: " + this.toString());
+    }
   }
 }

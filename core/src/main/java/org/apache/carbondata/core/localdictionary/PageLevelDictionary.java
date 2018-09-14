@@ -108,7 +108,7 @@ public class PageLevelDictionary {
           .putData(rowId++, localDictionaryGenerator.getDictionaryKeyBasedOnValue(i));
     }
     ColumnPageEncoder encoder =
-        DefaultEncodingFactory.getInstance().createEncoder(spec, dictionaryColumnPage);
+        DefaultEncodingFactory.getInstance().createEncoder(spec, dictionaryColumnPage, null);
     // get encoded dictionary values
     LocalDictionaryChunk localDictionaryChunk = encoder.encodeDictionary(dictionaryColumnPage);
     // set compressed dictionary values

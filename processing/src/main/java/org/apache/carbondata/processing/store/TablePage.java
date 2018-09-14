@@ -27,6 +27,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import org.apache.carbondata.core.constants.CarbonCommonConstants;
 import org.apache.carbondata.core.datastore.ColumnType;
 import org.apache.carbondata.core.datastore.TableSpec;
 import org.apache.carbondata.core.datastore.exception.CarbonDataWriterException;
@@ -38,13 +39,14 @@ import org.apache.carbondata.core.datastore.page.encoding.DefaultEncodingFactory
 import org.apache.carbondata.core.datastore.page.encoding.EncodedColumnPage;
 import org.apache.carbondata.core.datastore.page.encoding.EncodingFactory;
 import org.apache.carbondata.core.datastore.page.key.TablePageKey;
-import org.apache.carbondata.core.datastore.page.statistics.KeyPageStatsCollector;
 import org.apache.carbondata.core.datastore.page.statistics.LVStringStatsCollector;
 import org.apache.carbondata.core.datastore.page.statistics.PrimitivePageStatsCollector;
 import org.apache.carbondata.core.datastore.row.CarbonRow;
 import org.apache.carbondata.core.datastore.row.ComplexColumnInfo;
 import org.apache.carbondata.core.datastore.row.WriteStepRowUtil;
 import org.apache.carbondata.core.keygenerator.KeyGenException;
+import org.apache.carbondata.core.keygenerator.KeyGenerator;
+import org.apache.carbondata.core.keygenerator.factory.KeyGeneratorFactory;
 import org.apache.carbondata.core.localdictionary.generator.LocalDictionaryGenerator;
 import org.apache.carbondata.core.memory.MemoryException;
 import org.apache.carbondata.core.metadata.datatype.DataType;
@@ -101,8 +103,10 @@ public class TablePage {
       ColumnPage page;
       if (ColumnType.GLOBAL_DICTIONARY == columnType
           || ColumnType.DIRECT_DICTIONARY == columnType) {
-        page = ColumnPage.newPage(spec, DataTypes.BYTE_ARRAY, pageSize);
-        page.setStatsCollector(KeyPageStatsCollector.newInstance(DataTypes.BYTE_ARRAY));
+        TableSpec.DimensionSpec dimensionSpec = TableSpec.DimensionSpec
+            .newInstance(spec.getFieldName(), DataTypes.INT, spec.getColumnType());
+        page = ColumnPage.newPage(dimensionSpec, DataTypes.INT, pageSize);
+        page.setStatsCollector(PrimitivePageStatsCollector.newInstance(DataTypes.INT));
         dictDimensionPages[tmpNumDictDimIdx++] = page;
       } else {
         // will be encoded using string page
@@ -163,31 +167,32 @@ public class TablePage {
   public void addRow(int rowId, CarbonRow row) throws KeyGenException {
     // convert each column category, update key and stats
     byte[] mdk = WriteStepRowUtil.getMdk(row, model.getMDKeyGenerator());
-    convertToColumnarAndAddToPages(rowId, row, mdk);
+    convertToColumnarAndAddToPages(rowId, row);
     key.update(rowId, row, mdk);
   }
 
   // convert the input row object to columnar data and add to column pages
-  private void convertToColumnarAndAddToPages(int rowId, CarbonRow row, byte[] mdk)
-      throws KeyGenException {
+  private void convertToColumnarAndAddToPages(int rowId, CarbonRow row) {
     // 1. convert dictionary columns
-    byte[][] keys = model.getSegmentProperties().getFixedLengthKeySplitter().splitKey(mdk);
+    int[] dictDimension = WriteStepRowUtil.getDictDimension(row);
     for (int i = 0; i < dictDimensionPages.length; i++) {
-      dictDimensionPages[i].putData(rowId, keys[i]);
+      dictDimensionPages[i].putData(rowId,
+          dictDimension[i] == CarbonCommonConstants.MEMBER_DEFAULT_VAL_SURROGATE_KEY ?
+              null :
+              dictDimension[i]);
     }
 
     // 2. convert noDictionary columns and complex columns and varchar columns.
     int noDictionaryCount = noDictDimensionPages.length;
     int complexColumnCount = complexDimensionPages.length;
     if (noDictionaryCount > 0 || complexColumnCount > 0) {
-      TableSpec tableSpec = model.getTableSpec();
       byte[][] noDictAndComplex = WriteStepRowUtil.getNoDictAndComplexDimension(row);
       for (int i = 0; i < noDictAndComplex.length; i++) {
-        if (tableSpec.getDimensionSpec(dictDimensionPages.length + i).getSchemaDataType()
-            == DataTypes.VARCHAR) {
-          noDictDimensionPages[i].putData(rowId, noDictAndComplex[i]);
-        } else if (i < noDictionaryCount) {
-          noDictDimensionPages[i].putData(rowId, noDictAndComplex[i]);
+        if (i < noDictionaryCount) {
+          noDictDimensionPages[i].putData(rowId,
+              Arrays.equals(noDictAndComplex[i], CarbonCommonConstants.MEMBER_DEFAULT_VAL_ARRAY) ?
+                  null :
+                  noDictAndComplex[i]);
         } else {
           // complex columns
           addComplexColumn(i - noDictionaryCount, rowId, noDictAndComplex[i]);
@@ -282,19 +287,6 @@ public class TablePage {
     }
   }
 
-  // Adds length as a short element (first 2 bytes) to the head of the input byte array
-  private byte[] addShortLengthToByteArray(byte[] input) {
-    if (input.length > Short.MAX_VALUE) {
-      throw new RuntimeException("input data length " + input.length +
-          " bytes too long, maximum length supported is " + Short.MAX_VALUE + " bytes");
-    }
-    byte[] output = new byte[input.length + 2];
-    ByteBuffer buffer = ByteBuffer.wrap(output);
-    buffer.putShort((short)input.length);
-    buffer.put(input, 0, input.length);
-    return output;
-  }
-
   void encode() throws KeyGenException, MemoryException, IOException {
     // encode dimensions and measure
     EncodedColumnPage[] dimensions = encodeAndCompressDimensions();
@@ -312,7 +304,7 @@ public class TablePage {
     EncodedColumnPage[] encodedMeasures = new EncodedColumnPage[measurePages.length];
     for (int i = 0; i < measurePages.length; i++) {
       ColumnPageEncoder encoder = encodingFactory.createEncoder(
-          model.getTableSpec().getMeasureSpec(i), measurePages[i]);
+          model.getTableSpec().getMeasureSpec(i), measurePages[i], null);
       encodedMeasures[i] = encoder.encode(measurePages[i]);
     }
     return encodedMeasures;
@@ -320,7 +312,7 @@ public class TablePage {
 
   // apply and compress each dimension, set encoded data in `encodedData`
   private EncodedColumnPage[] encodeAndCompressDimensions()
-      throws KeyGenException, IOException, MemoryException {
+      throws IOException, MemoryException {
     List<EncodedColumnPage> encodedDimensions = new ArrayList<>();
     List<EncodedColumnPage> encodedComplexDimenions = new ArrayList<>();
     TableSpec tableSpec = model.getTableSpec();
@@ -335,16 +327,20 @@ public class TablePage {
       switch (spec.getColumnType()) {
         case GLOBAL_DICTIONARY:
         case DIRECT_DICTIONARY:
+          KeyGenerator keyGenerator = KeyGeneratorFactory
+              .getKeyGenerator(new int[] { model.getDictionaryColumnCardinality()[dictIndex] });
+          Map<String, Object> encoderParameter = new HashMap<>();
+          encoderParameter.put("keygenerator", keyGenerator);
           columnPageEncoder = encodingFactory.createEncoder(
               spec,
-              dictDimensionPages[dictIndex]);
+              dictDimensionPages[dictIndex], encoderParameter);
           encodedPage = columnPageEncoder.encode(dictDimensionPages[dictIndex++]);
           encodedDimensions.add(encodedPage);
           break;
         case PLAIN_VALUE:
           columnPageEncoder = encodingFactory.createEncoder(
               spec,
-              noDictDimensionPages[noDictIndex]);
+              noDictDimensionPages[noDictIndex], null);
           encodedPage = columnPageEncoder.encode(noDictDimensionPages[noDictIndex++]);
           encodedDimensions.add(encodedPage);
           break;
