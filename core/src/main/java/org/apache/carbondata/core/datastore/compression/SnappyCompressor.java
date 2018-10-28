@@ -210,4 +210,20 @@ public class SnappyCompressor implements Compressor {
   public boolean supportUnsafe() {
     return true;
   }
+
+  @Override public int uncompressedLength(byte[] data, int offset, int length) {
+    try {
+      return Snappy.uncompressedLength(data, offset, length);
+    } catch (IOException e) {
+      throw new RuntimeException(e);
+    }
+  }
+
+  @Override public int rawUncompress(byte[] data, int offset, int length, byte[] output) {
+    try {
+      return Snappy.rawUncompress(data, offset, length, output, 0);
+    } catch (IOException e) {
+      throw new RuntimeException(e);
+    }
+  }
 }

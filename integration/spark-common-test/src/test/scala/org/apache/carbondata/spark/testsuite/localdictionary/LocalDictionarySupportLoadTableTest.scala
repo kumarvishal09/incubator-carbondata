@@ -298,7 +298,7 @@ class LocalDictionarySupportLoadTableTest extends QueryTest with BeforeAndAfterA
       val encodingFactory = DefaultEncodingFactory.getInstance
       val decoder = encodingFactory.createDecoder(encodings, encoderMetas, compressorName)
       val dictionaryPage = decoder
-        .decode(local_dictionary.getDictionary_data, 0, local_dictionary.getDictionary_data.length)
+        .decode(local_dictionary.getDictionary_data, 0, local_dictionary.getDictionary_data.length, null)
       val dictionaryMap = new
           util.HashMap[DictionaryByteArrayWrapper, Integer]
       val usedDictionaryValues = util.BitSet

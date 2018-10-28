@@ -101,7 +101,7 @@ public class TestPageLevelDictionary {
       ColumnPageDecoder decoder = encodingFactory.createDecoder(
           encodings, encoderMetas, compressorName);
       ColumnPage decode = decoder.decode(localDictionaryChunkForBlocklet.getDictionary_data(), 0,
-          localDictionaryChunkForBlocklet.getDictionary_data().length);
+          localDictionaryChunkForBlocklet.getDictionary_data().length, null);
       for (int i = 0; i < 500; i++) {
         Arrays.equals(decode.getBytes(i), validateData[i]);
       }
@@ -184,7 +184,7 @@ public class TestPageLevelDictionary {
       ColumnPageDecoder decoder = encodingFactory.createDecoder(
           encodings, encoderMetas, compressorName);
       ColumnPage decode = decoder.decode(localDictionaryChunkForBlocklet.getDictionary_data(), 0,
-          localDictionaryChunkForBlocklet.getDictionary_data().length);
+          localDictionaryChunkForBlocklet.getDictionary_data().length, null);
       BitSet bitSet = BitSet.valueOf(CompressorFactory.getInstance().getCompressor(compressorName)
           .unCompressByte(localDictionaryChunkForBlocklet.getDictionary_values()));
       Assert.assertTrue(bitSet.cardinality()==validateData.length);

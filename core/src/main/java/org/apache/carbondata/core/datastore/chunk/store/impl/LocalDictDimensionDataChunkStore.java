@@ -39,10 +39,13 @@ public class LocalDictDimensionDataChunkStore implements DimensionDataChunkStore
 
   private CarbonDictionary dictionary;
 
+  private int dataLength;
+
   public LocalDictDimensionDataChunkStore(DimensionDataChunkStore dimensionDataChunkStore,
-      CarbonDictionary dictionary) {
+      CarbonDictionary dictionary, int dataLength) {
     this.dimensionDataChunkStore = dimensionDataChunkStore;
     this.dictionary = dictionary;
+    this.dataLength = dataLength;
   }
 
   /**
@@ -60,7 +63,7 @@ public class LocalDictDimensionDataChunkStore implements DimensionDataChunkStore
   public void fillVector(int[] invertedIndex, int[] invertedIndexReverse, byte[] data,
       ColumnVectorInfo vectorInfo) {
     int columnValueSize = dimensionDataChunkStore.getColumnValueSize();
-    int rowsNum = data.length / columnValueSize;
+    int rowsNum = dataLength / columnValueSize;
     CarbonColumnVector vector = vectorInfo.vector;
     if (!dictionary.isDictionaryUsed()) {
       dictionary.setDictionaryUsed();

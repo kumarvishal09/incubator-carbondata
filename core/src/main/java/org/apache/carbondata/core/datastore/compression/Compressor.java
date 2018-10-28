@@ -65,4 +65,8 @@ public interface Compressor {
    * @return true if it supports, otherwise return false
    */
   boolean supportUnsafe();
+
+  int uncompressedLength(byte[] data, int offset, int length);
+
+  int rawUncompress(byte[] data, int offset, int length, byte[] output);
 }

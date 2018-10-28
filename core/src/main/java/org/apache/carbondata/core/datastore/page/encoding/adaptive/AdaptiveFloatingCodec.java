@@ -23,6 +23,7 @@ import java.util.BitSet;
 import java.util.List;
 import java.util.Map;
 
+import org.apache.carbondata.core.datastore.ReusableDataBuffer;
 import org.apache.carbondata.core.datastore.compression.Compressor;
 import org.apache.carbondata.core.datastore.compression.CompressorFactory;
 import org.apache.carbondata.core.datastore.page.ColumnPage;
@@ -112,28 +113,34 @@ public class AdaptiveFloatingCodec extends AdaptiveCodec {
   @Override
   public ColumnPageDecoder createDecoder(final ColumnPageEncoderMeta meta) {
     return new ColumnPageDecoder() {
-      @Override
-      public ColumnPage decode(byte[] input, int offset, int length)
-          throws MemoryException, IOException {
+      @Override public ColumnPage decode(byte[] input, int offset, int length,
+          ReusableDataBuffer reusableDataBuffer) throws MemoryException, IOException {
         ColumnPage page = ColumnPage.decompress(meta, input, offset, length, false);
         return LazyColumnPage.newPage(page, converter);
       }
 
-      @Override
-      public void decodeAndFillVector(byte[] input, int offset, int length,
-          ColumnVectorInfo vectorInfo, BitSet nullBits, boolean isLVEncoded, int pageSize)
+      @Override public void decodeAndFillVector(byte[] input, int offset, int length,
+          ColumnVectorInfo vectorInfo, BitSet nullBits, boolean isLVEncoded, int pageSize,
+          ReusableDataBuffer reusableDataBuffer)
           throws MemoryException, IOException {
         Compressor compressor =
             CompressorFactory.getInstance().getCompressor(meta.getCompressorName());
-        byte[] unCompressData = compressor.unCompressByte(input, offset, length);
+        int uncompressedLength = compressor.uncompressedLength(input, offset, length);
+        byte[] unCompressData = null;
+        if (null != reusableDataBuffer) {
+          unCompressData = reusableDataBuffer.getDataBuffer(uncompressedLength);
+        } else {
+          unCompressData = new byte[uncompressedLength];
+        }
+        compressor.rawUncompress(input, offset, length, unCompressData);
         converter.decodeAndFillVector(unCompressData, vectorInfo, nullBits, meta.getStoreDataType(),
             pageSize);
       }
 
-      @Override
-      public ColumnPage decode(byte[] input, int offset, int length, boolean isLVEncoded)
+      @Override public ColumnPage decode(byte[] input, int offset, int length, boolean isLVEncoded,
+          ReusableDataBuffer reusableDataBuffer)
           throws MemoryException, IOException {
-        return decode(input, offset, length);
+        return decode(input, offset, length, reusableDataBuffer);
       }
     };
   }

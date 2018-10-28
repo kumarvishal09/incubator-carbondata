@@ -48,9 +48,14 @@ public abstract class SafeVariableLengthDimensionDataChunkStore
    */
   private int[] dataOffsets;
 
-  public SafeVariableLengthDimensionDataChunkStore(boolean isInvertedIndex, int numberOfRows) {
+  private int dataLength;
+
+  public SafeVariableLengthDimensionDataChunkStore(boolean isInvertedIndex, int numberOfRows,
+      int dataLength) {
     super(isInvertedIndex);
     this.numberOfRows = numberOfRows;
+    this.dataOffsets = new int[numberOfRows];
+    this.dataLength = dataLength;
   }
 
   /**
@@ -100,8 +105,8 @@ public abstract class SafeVariableLengthDimensionDataChunkStore
       ColumnVectorInfo vectorInfo) {
     CarbonColumnVector vector = vectorInfo.vector;
     DataType dt = vector.getType();
-    AbstractNonDictionaryVectorFiller vectorFiller =
-        NonDictionaryVectorFillerFactory.getVectorFiller(getLengthSize(), dt, numberOfRows);
+    AbstractNonDictionaryVectorFiller vectorFiller = NonDictionaryVectorFillerFactory
+        .getVectorFiller(getLengthSize(), dt, numberOfRows, dataLength);
     vector = ColumnarVectorWrapperDirectFactory
         .getDirectVectorWrapperFactory(vector, invertedIndex, new BitSet(), vectorInfo.deletedRows,
             false, false);
@@ -133,7 +138,7 @@ public abstract class SafeVariableLengthDimensionDataChunkStore
       length = dataOffsets[rowId + 1] - (currentDataOffset + getLengthSize());
     } else {
       // for last record
-      length = this.data.length - currentDataOffset;
+      length = this.dataLength - currentDataOffset;
     }
     byte[] currentRowData = new byte[length];
     System.arraycopy(data, currentDataOffset, currentRowData, 0, length);
@@ -159,7 +164,7 @@ public abstract class SafeVariableLengthDimensionDataChunkStore
       length = dataOffsets[rowId + 1] - (currentDataOffset + getLengthSize());
     } else {
       // for last record
-      length = this.data.length - currentDataOffset;
+      length = this.dataLength - currentDataOffset;
     }
     DataType dt = vector.getType();
 
@@ -204,7 +209,7 @@ public abstract class SafeVariableLengthDimensionDataChunkStore
       length = dataOffsets[rowId + 1] - (currentDataOffset + getLengthSize());
     } else {
       // for last record
-      length = this.data.length - currentDataOffset;
+      length = this.dataLength - currentDataOffset;
     }
     return ByteUtil.UnsafeComparer.INSTANCE
         .compareTo(data, currentDataOffset, length, compareValue, 0, compareValue.length);

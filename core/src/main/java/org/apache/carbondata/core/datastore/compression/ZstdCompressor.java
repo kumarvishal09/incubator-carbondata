@@ -167,4 +167,12 @@ public class ZstdCompressor implements Compressor {
   public boolean supportUnsafe() {
     return false;
   }
+
+  @Override public int uncompressedLength(byte[] data, int offset, int length) {
+    throw new RuntimeException("Unsupported operation Exception");
+  }
+
+  @Override public int rawUncompress(byte[] data, int offset, int length, byte[] output) {
+    throw new RuntimeException("Unsupported operation Exception");
+  }
 }
