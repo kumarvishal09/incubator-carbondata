@@ -29,14 +29,13 @@ class ColumnarVectorWrapperDirectWithInvertedIndex extends AbstractCarbonColumna
 
   protected int[] invertedIndex;
 
-  protected CarbonColumnVector columnVector;
 
   protected boolean isnullBitsExists;
 
   public ColumnarVectorWrapperDirectWithInvertedIndex(CarbonColumnVector columnVector,
       int[] invertedIndex, boolean isnullBitsExists) {
+    super(columnVector);
     this.invertedIndex = invertedIndex;
-    this.columnVector = columnVector;
     this.isnullBitsExists = isnullBitsExists;
   }
 
@@ -140,5 +139,9 @@ class ColumnarVectorWrapperDirectWithInvertedIndex extends AbstractCarbonColumna
     for (int i = srcIndex; i < count; i++) {
       columnVector.putByte(invertedIndex[rowId++], src[i]);
     }
+  }
+
+  @Override public void putArray(int rowId, int offset, int length) {
+    columnVector.putArray(invertedIndex[rowId], offset, length);
   }
 }

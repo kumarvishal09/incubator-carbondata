@@ -147,7 +147,7 @@ public class FileReaderImpl implements FileReader {
    * @return byte buffer
    */
   private ByteBuffer read(FileChannel channel, int size, long offset) throws IOException {
-    ByteBuffer byteBffer = ByteBuffer.wrap(new byte[size]);
+    ByteBuffer byteBffer = ByteBuffer.allocate(size);
     channel.position(offset);
     channel.read(byteBffer);
     byteBffer.rewind();
@@ -162,7 +162,7 @@ public class FileReaderImpl implements FileReader {
    * @return byte buffer
    */
   private ByteBuffer read(FileChannel channel, int size) throws IOException {
-    ByteBuffer byteBffer = ByteBuffer.wrap(new byte[size]);
+    ByteBuffer byteBffer = ByteBuffer.allocate(size);
     channel.read(byteBffer);
     byteBffer.rewind();
     return byteBffer;
@@ -198,7 +198,7 @@ public class FileReaderImpl implements FileReader {
 
   @Override public ByteBuffer readByteBuffer(String filePath, long offset, int length)
       throws IOException {
-    ByteBuffer byteBuffer = ByteBuffer.wrap(new byte[length]);
+    ByteBuffer byteBuffer = ByteBuffer.allocate(length);
     FileChannel fileChannel = updateCache(filePath);
     fileChannel.position(offset);
     fileChannel.read(byteBuffer);
