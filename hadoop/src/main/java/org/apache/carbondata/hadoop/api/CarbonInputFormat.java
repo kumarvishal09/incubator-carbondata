@@ -125,6 +125,7 @@ public abstract class CarbonInputFormat<T> extends FileInputFormat<Void, T> {
   protected int numStreamFiles = 0;
   protected int hitedStreamFiles = 0;
   protected int numBlocks = 0;
+  protected List fileLists = null;
 
   public int getNumSegments() {
     return numSegments;
@@ -840,4 +841,7 @@ m filterExpression
     getQuerySegmentToAccess(conf, carbonTable.getDatabaseName(), tableName);
   }
 
+  public void setFileLists(List fileLists) {
+    this.fileLists = fileLists;
+  }
 }
