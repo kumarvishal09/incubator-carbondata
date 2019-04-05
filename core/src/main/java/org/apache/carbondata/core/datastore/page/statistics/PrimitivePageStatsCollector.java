@@ -19,6 +19,7 @@ package org.apache.carbondata.core.datastore.page.statistics;
 
 import java.math.BigDecimal;
 
+import org.apache.carbondata.core.constants.CarbonCommonConstants;
 import org.apache.carbondata.core.datastore.page.encoding.ColumnPageEncoderMeta;
 import org.apache.carbondata.core.datastore.page.encoding.bool.BooleanConvert;
 import org.apache.carbondata.core.metadata.ValueEncoderMeta;
@@ -403,6 +404,14 @@ public class PrimitivePageStatsCollector implements ColumnPageStatsCollector, Si
 
   @Override public boolean writeMinMax() {
     return true;
+  }
+
+  @Override public void updateNull(int rowId, Object nullValue) {
+    if (dataType == DataTypes.INT) {
+      update(CarbonCommonConstants.MEMBER_DEFAULT_VAL_SURROGATE_KEY);
+    } else {
+      throw new UnsupportedOperationException("Operation not supported");
+    }
   }
 
 }

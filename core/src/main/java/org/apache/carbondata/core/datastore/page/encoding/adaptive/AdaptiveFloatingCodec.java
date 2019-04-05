@@ -53,10 +53,11 @@ public class AdaptiveFloatingCodec extends AdaptiveCodec {
 
   private double factor;
   private float floatFactor;
+  private ColumnPage encodedPage;
 
   public AdaptiveFloatingCodec(DataType srcDataType, DataType targetDataType,
-      SimpleStatsResult stats, boolean isInvertedIndex) {
-    super(srcDataType, targetDataType, stats, isInvertedIndex);
+      SimpleStatsResult stats) {
+    super(srcDataType, targetDataType, stats);
     this.factor = Math.pow(10, stats.getDecimalCount());
     this.floatFactor = (float) factor;
   }
@@ -67,22 +68,22 @@ public class AdaptiveFloatingCodec extends AdaptiveCodec {
   }
 
   @Override
-  public ColumnPageEncoder createEncoder(Map<String, String> parameter) {
+  public ColumnPageEncoder createEncoder(Map<String, Object> parameter) {
     return new ColumnPageEncoder() {
-      byte[] result = null;
       @Override
       protected byte[] encodeData(ColumnPage input) throws MemoryException, IOException {
         if (encodedPage != null) {
           throw new IllegalStateException("already encoded");
         }
-        Compressor compressor =
-            CompressorFactory.getInstance().getCompressor(input.getColumnCompressorName());
-        result = encodeAndCompressPage(input, converter, compressor);
-        byte[] bytes = writeInvertedIndexIfRequired(result);
+        encodedPage = ColumnPage.newPage(
+            new ColumnPageEncoderMeta(input.getColumnPageEncoderMeta().getColumnSpec(),
+                targetDataType, input.getColumnPageEncoderMeta().getCompressorName()),
+            input.getPageSize());
+        Compressor compressor = CompressorFactory.getInstance().getCompressor(
+            input.getColumnCompressorName());
+        input.convertValue(converter);
+        byte[] result = encodedPage.compress(compressor);
         encodedPage.freeMemory();
-        if (bytes.length != 0) {
-          return bytes;
-        }
         return result;
       }
 
@@ -90,9 +91,6 @@ public class AdaptiveFloatingCodec extends AdaptiveCodec {
       protected List<Encoding> getEncodingList() {
         List<Encoding> encodings = new ArrayList<Encoding>();
         encodings.add(Encoding.ADAPTIVE_FLOATING);
-        if (null != indexStorage && indexStorage.getRowIdPageLengthInBytes() > 0) {
-          encodings.add(Encoding.INVERTED_INDEX);
-        }
         return encodings;
       }
 
@@ -101,12 +99,6 @@ public class AdaptiveFloatingCodec extends AdaptiveCodec {
         return new ColumnPageEncoderMeta(inputPage.getColumnSpec(), targetDataType, stats,
             inputPage.getColumnCompressorName());
       }
-
-      @Override
-      protected void fillLegacyFields(DataChunk2 dataChunk) throws IOException {
-        fillLegacyFieldsIfRequired(dataChunk, result);
-      }
-
     };
   }
 

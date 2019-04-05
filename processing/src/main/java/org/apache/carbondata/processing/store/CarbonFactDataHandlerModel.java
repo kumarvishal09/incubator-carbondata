@@ -187,6 +187,8 @@ public class CarbonFactDataHandlerModel {
 
   private String columnCompressor;
 
+  private int[] dictionaryColumnCardinality;
+
   /**
    * Create the model using @{@link CarbonDataLoadConfiguration}
    */
@@ -270,6 +272,8 @@ public class CarbonFactDataHandlerModel {
     carbonFactDataHandlerModel.setMeasureDataType(configuration.getMeasureDataType());
     carbonFactDataHandlerModel
         .setNoDictAndComplexColumns(configuration.getNoDictAndComplexDimensions());
+    carbonFactDataHandlerModel
+        .setDictionaryColumnCardinality(dimLensWithComplex);
     carbonFactDataHandlerModel.setWrapperColumnSchema(wrapperColumnSchema);
     carbonFactDataHandlerModel.setPrimitiveDimLens(simpleDimsLen);
     carbonFactDataHandlerModel.setCarbonDataFileAttributes(carbonDataFileAttributes);
@@ -383,6 +387,8 @@ public class CarbonFactDataHandlerModel {
     for (CarbonMeasure msr : segmentProperties.getMeasures()) {
       measureDataTypes[i++] = msr.getDataType();
     }
+    carbonFactDataHandlerModel
+        .setDictionaryColumnCardinality(segmentProperties.getDimColumnsCardinality());
     carbonFactDataHandlerModel.setMeasureDataType(measureDataTypes);
     carbonFactDataHandlerModel.setNoDictAndComplexColumns(noDicAndComplexColumns);
     CarbonUtil.checkAndCreateFolderWithPermission(carbonDataDirectoryPath);
@@ -778,6 +784,14 @@ public class CarbonFactDataHandlerModel {
 
   public void setNoDictAndComplexColumns(CarbonColumn[] noDictAndComplexColumns) {
     this.noDictAndComplexColumns = noDictAndComplexColumns;
+  }
+
+  public int[] getDictionaryColumnCardinality() {
+    return dictionaryColumnCardinality;
+  }
+
+  public void setDictionaryColumnCardinality(int[] dictionaryColumnCardinality) {
+    this.dictionaryColumnCardinality = dictionaryColumnCardinality;
   }
 }
 

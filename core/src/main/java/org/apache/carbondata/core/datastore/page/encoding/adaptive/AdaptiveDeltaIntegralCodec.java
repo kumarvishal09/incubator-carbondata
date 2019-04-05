@@ -58,9 +58,11 @@ public class AdaptiveDeltaIntegralCodec extends AdaptiveCodec {
 
   private long max;
 
+  private ColumnPage encodedPage;
+
   public AdaptiveDeltaIntegralCodec(DataType srcDataType, DataType targetDataType,
-      SimpleStatsResult stats, boolean isInvertedIndex) {
-    super(srcDataType, targetDataType, stats, isInvertedIndex);
+      SimpleStatsResult stats) {
+    super(srcDataType, targetDataType, stats);
     if (srcDataType == DataTypes.BYTE) {
       this.max = (byte) stats.getMax();
     } else if (srcDataType == DataTypes.SHORT) {
@@ -86,22 +88,22 @@ public class AdaptiveDeltaIntegralCodec extends AdaptiveCodec {
   }
 
   @Override
-  public ColumnPageEncoder createEncoder(Map<String, String> parameter) {
+  public ColumnPageEncoder createEncoder(Map<String, Object> parameter) {
     return new ColumnPageEncoder() {
-      byte[] result = null;
       @Override
       protected byte[] encodeData(ColumnPage input) throws MemoryException, IOException {
         if (encodedPage != null) {
           throw new IllegalStateException("already encoded");
         }
-        Compressor compressor =
-            CompressorFactory.getInstance().getCompressor(input.getColumnCompressorName());
-        result = encodeAndCompressPage(input, converter, compressor);
-        byte[] bytes = writeInvertedIndexIfRequired(result);
+        encodedPage = ColumnPage.newPage(
+            new ColumnPageEncoderMeta(input.getColumnPageEncoderMeta().getColumnSpec(),
+                targetDataType, input.getColumnPageEncoderMeta().getCompressorName()),
+            input.getPageSize());
+        input.convertValue(converter);
+        Compressor compressor = CompressorFactory.getInstance().getCompressor(
+            input.getColumnCompressorName());
+        byte[] result = encodedPage.compress(compressor);
         encodedPage.freeMemory();
-        if (bytes.length != 0) {
-          return bytes;
-        }
         return result;
       }
 
@@ -115,17 +117,8 @@ public class AdaptiveDeltaIntegralCodec extends AdaptiveCodec {
       protected List<Encoding> getEncodingList() {
         List<Encoding> encodings = new ArrayList<>();
         encodings.add(Encoding.ADAPTIVE_DELTA_INTEGRAL);
-        if (null != indexStorage && indexStorage.getRowIdPageLengthInBytes() > 0) {
-          encodings.add(Encoding.INVERTED_INDEX);
-        }
         return encodings;
       }
-
-      @Override
-      protected void fillLegacyFields(DataChunk2 dataChunk) throws IOException {
-        fillLegacyFieldsIfRequired(dataChunk, result);
-      }
-
     };
   }
 

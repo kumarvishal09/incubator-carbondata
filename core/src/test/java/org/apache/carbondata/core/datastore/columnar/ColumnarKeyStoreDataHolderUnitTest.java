@@ -26,24 +26,24 @@ import static org.junit.Assert.assertEquals;
 public class ColumnarKeyStoreDataHolderUnitTest {
 
   private static ColumnarKeyStoreDataHolder columnarKeyStoreDataHolder;
-  private static ColumnarKeyStoreMetadata columnarKeyStoreMetadata;
+  private static ColumnDataVo columnDataVo;
 
   @BeforeClass public static void setup() {
     byte[] keyBlockData = new byte[] { 16, 8, 32, 40, 8, 8, 8 };
     int eachRowSize = 2;
     int[] reverseIndex = new int[] { 1, 5, 6, 3, 8 };
-    columnarKeyStoreMetadata = new ColumnarKeyStoreMetadata(eachRowSize);
-    columnarKeyStoreMetadata.setColumnReverseIndex(reverseIndex);
+    columnDataVo = new ColumnDataVo(eachRowSize);
+    columnDataVo.setColumnReverseIndex(reverseIndex);
     columnarKeyStoreDataHolder =
-        new ColumnarKeyStoreDataHolder(keyBlockData, columnarKeyStoreMetadata);
+        new ColumnarKeyStoreDataHolder(keyBlockData, columnDataVo);
   }
 
   @Test public void testGetSurrogateKeyWithNullINGetColumnReverseIndex() {
     byte[] keyBlockData = new byte[] { 16, 8, 32, 40, 8, 8, 8 };
     int eachRowSize = 1;
-    ColumnarKeyStoreMetadata columnarKeyStoreMetadata = new ColumnarKeyStoreMetadata(eachRowSize);
+    ColumnDataVo columnDataVo = new ColumnDataVo(eachRowSize);
     ColumnarKeyStoreDataHolder columnarKeyStoreDataHolderNew =
-        new ColumnarKeyStoreDataHolder(keyBlockData, columnarKeyStoreMetadata);
+        new ColumnarKeyStoreDataHolder(keyBlockData, columnDataVo);
     int columnIndex = 5;
     int expected_result = 8;
     int result = columnarKeyStoreDataHolderNew.getSurrogateKey(columnIndex);
@@ -53,9 +53,9 @@ public class ColumnarKeyStoreDataHolderUnitTest {
   @Test public void testGetSurrogateKeyWithNullINGetColumnReverseIndexAndRowSizeTwo() {
     byte[] keyBlockData = new byte[] { 16, 8, 32, 40, 8, 8, 8 };
     int eachRowSize = 2;
-    ColumnarKeyStoreMetadata columnarKeyStoreMetadata = new ColumnarKeyStoreMetadata(eachRowSize);
+    ColumnDataVo columnDataVo = new ColumnDataVo(eachRowSize);
     ColumnarKeyStoreDataHolder columnarKeyStoreDataHolderNew =
-        new ColumnarKeyStoreDataHolder(keyBlockData, columnarKeyStoreMetadata);
+        new ColumnarKeyStoreDataHolder(keyBlockData, columnDataVo);
     int columnIndex = 0;
     int expected_result = 4104;
     int result = columnarKeyStoreDataHolderNew.getSurrogateKey(columnIndex);
@@ -81,7 +81,7 @@ public class ColumnarKeyStoreDataHolderUnitTest {
     byte[] keyBlockData = new byte[] { 32, 64, 32, 40, 64, 8, 8 };
     List<byte[]> noDictionaryValBasedKeyBlockData = new java.util.ArrayList<>();
     noDictionaryValBasedKeyBlockData.add(keyBlockData);
-    new ColumnarKeyStoreDataHolder(columnarKeyStoreMetadata);
+    new ColumnarKeyStoreDataHolder(columnDataVo);
     int columnIndex = 0;
     int expected_result = 8232;
     int result = columnarKeyStoreDataHolder.getSurrogateKey(columnIndex);
