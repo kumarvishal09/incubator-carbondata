@@ -14,34 +14,26 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package org.apache.carbondata.core.datastore.columnar;
 
-import java.util.Arrays;
+public interface ColumnDataVo<T> extends Comparable {
 
-import org.apache.carbondata.core.util.ByteUtil.UnsafeComparer;
+  /**
+   *
+   * @return data
+   */
+  T getData();
 
-public class ColumnWithRowIdForHighCard<T> extends ColumnWithRowId<T>
-    implements Comparable<ColumnWithRowId<T>> {
+  /**
+   *
+   * @return the actual position of the data
+   */
+  short getIndex();
 
-  ColumnWithRowIdForHighCard(byte[] column, T index) {
-    super(column, index);
-  }
+  /**
+   *
+   * @return length of the data in case of binary data
+   */
+  int getLength();
 
-  @Override public int compareTo(ColumnWithRowId o) {
-    return UnsafeComparer.INSTANCE
-        .compareTo(column, 2, column.length - 2, o.column, 2, o.column.length - 2);
-  }
-
-  @Override public boolean equals(Object obj) {
-    if (obj == null || getClass() != obj.getClass()) {
-      return false;
-    }
-    ColumnWithRowIdForHighCard o = (ColumnWithRowIdForHighCard)obj;
-    return Arrays.equals(column, o.column) && getIndex() == o.getIndex();
-  }
-
-  @Override public int hashCode() {
-    return Arrays.hashCode(column) + getIndex().hashCode();
-  }
 }

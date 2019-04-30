@@ -315,7 +315,7 @@ public class TableSpec {
     }
   }
 
-  public class DimensionSpec extends ColumnSpec implements Writable {
+  public static class DimensionSpec extends ColumnSpec implements Writable {
 
     // indicate whether this dimension is in sort column
     private boolean inSortColumns;
@@ -325,11 +325,16 @@ public class TableSpec {
 
     // indicate the actual postion in blocklet
     private short actualPostion;
-    DimensionSpec(ColumnType columnType, CarbonDimension dimension, short actualPostion) {
+
+    private DimensionSpec(ColumnType columnType, CarbonDimension dimension, short actualPostion) {
       super(dimension.getColName(), dimension.getDataType(), columnType);
       this.inSortColumns = dimension.isSortColumn();
       this.doInvertedIndex = dimension.isUseInvertedIndex();
       this.actualPostion = actualPostion;
+    }
+
+    public DimensionSpec(String columnName, DataType dataType, ColumnType columnType) {
+      super(columnName, dataType, columnType);
     }
 
     public boolean isInSortColumns() {
@@ -354,10 +359,10 @@ public class TableSpec {
     }
   }
 
-  public class MeasureSpec extends ColumnSpec implements Writable {
+  public static class MeasureSpec extends ColumnSpec implements Writable {
 
-    MeasureSpec(String fieldName, DataType dataType) {
-      super(fieldName, dataType, ColumnType.MEASURE);
+    public MeasureSpec(String columnName, DataType dataType) {
+      super(columnName, dataType, ColumnType.MEASURE);
     }
 
     @Override

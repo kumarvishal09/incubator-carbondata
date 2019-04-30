@@ -3086,10 +3086,7 @@ public final class CarbonUtil {
         // check whether the column is local dictionary column or not
         if (columnSchema.isLocalDictColumn()) {
           columnLocalDictGenMap.put(columnSchema.getColumnName(),
-              new ColumnLocalDictionaryGenerator(localDictionaryThreshold,
-                  columnSchema.getDataType() == DataTypes.VARCHAR ?
-                      CarbonCommonConstants.INT_SIZE_IN_BYTE :
-                      CarbonCommonConstants.SHORT_SIZE_IN_BYTE));
+              new ColumnLocalDictionaryGenerator(localDictionaryThreshold));
         }
       }
     }
@@ -3261,7 +3258,7 @@ public final class CarbonUtil {
       default:
         // for primitive column
         ColumnPageEncoder columnPageEncoder =
-            DefaultEncodingFactory.getInstance().createEncoder(columnSpec, columnPage);
+            DefaultEncodingFactory.getInstance().createEncoder(columnSpec, columnPage, null);
         newEncodedColumnPage = columnPageEncoder.encode(columnPage);
     }
     FallbackEncodedColumnPage fallbackEncodedColumnPage =

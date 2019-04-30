@@ -21,7 +21,6 @@ import java.io.{File, PrintWriter}
 import java.util
 import java.util.Collections
 
-import org.apache.spark.sql.Row
 import org.apache.spark.sql.test.util.QueryTest
 import org.scalatest.{BeforeAndAfterAll, Ignore}
 
@@ -31,10 +30,9 @@ import org.apache.carbondata.core.datastore.block.TableBlockInfo
 import org.apache.carbondata.core.datastore.chunk.impl.DimensionRawColumnChunk
 import org.apache.carbondata.core.datastore.chunk.reader.CarbonDataReaderFactory
 import org.apache.carbondata.core.datastore.chunk.reader.dimension.v3.CompressedDimensionChunkFileBasedReaderV3
-import org.apache.carbondata.core.datastore.compression.CompressorFactory
+import org.apache.carbondata.core.datastore.compression.{CompressorFactory}
 import org.apache.carbondata.core.datastore.filesystem.{CarbonFile, CarbonFileFilter}
 import org.apache.carbondata.core.datastore.impl.FileFactory
-import org.apache.carbondata.core.datastore.page.encoding.DefaultEncodingFactory
 import org.apache.carbondata.core.metadata.ColumnarFormatVersion
 import org.apache.carbondata.core.util.{CarbonMetadataUtil, CarbonProperties, DataFileFooterConverterV3}
 
@@ -135,22 +133,6 @@ class LocalDictionarySupportLoadTableTest extends QueryTest with BeforeAndAfterA
     assert(!checkForLocalDictionary(getDimRawChunk(0)))
     assert(checkForLocalDictionary(getDimRawChunk(1)))
     assert(checkForLocalDictionary(getDimRawChunk(2)))
-  }
-
-  test("test local dictionary generation for map type") {
-    sql("drop table if exists local2")
-    sql(
-      "CREATE TABLE local2(name map<string,string>) STORED BY 'carbondata' tblproperties" +
-      "('local_dictionary_enable'='true','local_dictionary_include'='name')")
-    sql(
-      "insert into local2 values('Manish\002Nalla\001Manish\002Gupta\001Shardul\002Singh" +
-      "\001Vishal\002Kumar')")
-    checkAnswer(sql("select * from local2"), Seq(
-      Row(Map("Manish" -> "Nalla", "Shardul" -> "Singh", "Vishal" -> "Kumar"))))
-    assert(!checkForLocalDictionary(getDimRawChunk(0)))
-    assert(!checkForLocalDictionary(getDimRawChunk(1)))
-    assert(checkForLocalDictionary(getDimRawChunk(2)))
-    assert(checkForLocalDictionary(getDimRawChunk(3)))
   }
 
   test("test local dictionary data validation") {
@@ -310,24 +292,17 @@ class LocalDictionarySupportLoadTableTest extends QueryTest with BeforeAndAfterA
     if (null != local_dictionary) {
       val compressorName = CarbonMetadataUtil.getCompressorNameFromChunkMeta(
         rawColumnPage.getDataChunkV3.getData_chunk_list.get(0).getChunk_meta)
-      val encodings = local_dictionary.getDictionary_meta.encoders
-      val encoderMetas = local_dictionary.getDictionary_meta.getEncoder_meta
-      val encodingFactory = DefaultEncodingFactory.getInstance
-      val decoder = encodingFactory.createDecoder(encodings, encoderMetas, compressorName)
-      val dictionaryPage = decoder
-        .decode(local_dictionary.getDictionary_data, 0, local_dictionary.getDictionary_data.length)
+      val compressor = CompressorFactory.getInstance.getCompressor(compressorName)
+      val dictionary = DimensionRawColumnChunk.getDictionary(local_dictionary, compressor)
       val dictionaryMap = new
           util.HashMap[DictionaryByteArrayWrapper, Integer]
-      val usedDictionaryValues = util.BitSet
-        .valueOf(CompressorFactory.getInstance.getCompressor(compressorName)
-          .unCompressByte(local_dictionary.getDictionary_values))
-      var index = 0
-      var i = usedDictionaryValues.nextSetBit(0)
-      while ( { i >= 0 }) {
-        dictionaryMap
-          .put(new DictionaryByteArrayWrapper(dictionaryPage.getBytes({ index += 1; index - 1 })),
-            i)
-        i = usedDictionaryValues.nextSetBit(i + 1)
+      for( a <- 0 until dictionary.getDictionarySize){
+        val bytes = dictionary.getDictionaryValue(a)
+        if(null!= bytes && !util.Arrays.equals(CarbonCommonConstants.MEMBER_DEFAULT_VAL_ARRAY, bytes)) {
+          dictionaryMap
+            .put(new DictionaryByteArrayWrapper(bytes),
+              a)
+        }
       }
       for (i <- data.indices) {
         if (null == dictionaryMap.get(new DictionaryByteArrayWrapper(data(i).getBytes))) {

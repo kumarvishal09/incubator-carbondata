@@ -24,7 +24,6 @@ import java.util.Map;
 import org.apache.carbondata.common.annotations.InterfaceAudience;
 import org.apache.carbondata.core.datamap.Segment;
 import org.apache.carbondata.core.datastore.block.SegmentProperties;
-import org.apache.carbondata.core.keygenerator.columnar.ColumnarSplitter;
 import org.apache.carbondata.core.metadata.datatype.DataTypes;
 import org.apache.carbondata.core.metadata.schema.table.column.CarbonColumn;
 import org.apache.carbondata.core.metadata.schema.table.column.CarbonDimension;
@@ -43,7 +42,6 @@ import org.apache.commons.collections.Predicate;
  */
 @InterfaceAudience.Internal
 public class BloomDataMapWriter extends AbstractBloomDataMapWriter {
-  private ColumnarSplitter columnarSplitter;
   // for the dict/sort/date column, they are encoded in MDK,
   // this maps the index column name to the index in MDK
   private Map<String, Integer> indexCol2MdkIdx;
@@ -55,7 +53,6 @@ public class BloomDataMapWriter extends AbstractBloomDataMapWriter {
     super(tablePath, dataMapName, indexColumns, segment, shardName, segmentProperties,
         bloomFilterSize, bloomFilterFpp, compressBloom);
 
-    columnarSplitter = segmentProperties.getFixedLengthKeySplitter();
     this.indexCol2MdkIdx = new HashMap<>();
     int idx = 0;
     for (final CarbonDimension dimension : segmentProperties.getDimensions()) {
@@ -75,25 +72,18 @@ public class BloomDataMapWriter extends AbstractBloomDataMapWriter {
   }
 
   protected byte[] convertNonDictionaryValue(int indexColIdx, Object value) {
-    if (DataTypes.VARCHAR == indexColumns.get(indexColIdx).getDataType()) {
-      return DataConvertUtil.getRawBytesForVarchar((byte[]) value);
-    } else if (DataTypeUtil.isPrimitiveColumn(indexColumns.get(indexColIdx).getDataType())) {
+    if (DataTypeUtil.isPrimitiveColumn(indexColumns.get(indexColIdx).getDataType())) {
       // get bytes for the original value of the no dictionary column
       return CarbonUtil.getValueAsBytes(indexColumns.get(indexColIdx).getDataType(), value);
     } else {
-      return DataConvertUtil.getRawBytes((byte[]) value);
+      return (byte[]) value;
     }
   }
 
   @Override
   protected byte[] convertDictionaryValue(int indexColIdx, Object value) {
     // input value from onPageAdded in load process is byte[]
-
-    // for dict columns including dictionary and date columns decode value to get the surrogate key
-    int thisKeyIdx = indexCol2MdkIdx.get(indexColumns.get(indexColIdx).getColName());
-    int surrogateKey = CarbonUtil.getSurrogateInternal((byte[]) value, 0,
-        columnarSplitter.getBlockKeySize()[thisKeyIdx]);
     // store the dictionary key in bloom
-    return CarbonUtil.getValueAsBytes(DataTypes.INT, surrogateKey);
+    return CarbonUtil.getValueAsBytes(DataTypes.INT, value);
   }
 }

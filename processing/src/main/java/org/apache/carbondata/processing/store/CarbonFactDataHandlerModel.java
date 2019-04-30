@@ -190,6 +190,8 @@ public class CarbonFactDataHandlerModel {
   // this will help in knowing complex byte array will be divided into how may new pages.
   private int noDictAllComplexColumnDepth;
 
+  private int[] dictionaryColumnCardinality;
+
   /**
    * Create the model using @{@link CarbonDataLoadConfiguration}
    */
@@ -295,7 +297,8 @@ public class CarbonFactDataHandlerModel {
     carbonFactDataHandlerModel.tableSpec = configuration.getTableSpec();
     carbonFactDataHandlerModel.sortScope = CarbonDataProcessorUtil.getSortScope(configuration);
     carbonFactDataHandlerModel.columnCompressor = configuration.getColumnCompressor();
-
+    carbonFactDataHandlerModel
+        .setDictionaryColumnCardinality(dimLensWithComplex);
     if (listener == null) {
       listener = new DataMapWriterListener();
       listener.registerAllWriter(
@@ -372,7 +375,8 @@ public class CarbonFactDataHandlerModel {
     int[] formattedCardinality =
         CarbonUtil.getFormattedCardinality(dimAndComplexColumnCardinality, wrapperColumnSchema);
     carbonFactDataHandlerModel.setColCardinality(formattedCardinality);
-
+    carbonFactDataHandlerModel
+        .setDictionaryColumnCardinality(segmentProperties.getDimColumnsCardinality());
     carbonFactDataHandlerModel.setComplexIndexMap(
         convertComplexDimensionToComplexIndexMap(segmentProperties,
             loadModel.getSerializationNullFormat()));
@@ -784,6 +788,14 @@ public class CarbonFactDataHandlerModel {
 
   public void setNoDictAllComplexColumnDepth(int noDictAllComplexColumnDepth) {
     this.noDictAllComplexColumnDepth = noDictAllComplexColumnDepth;
+  }
+
+  public int[] getDictionaryColumnCardinality() {
+    return dictionaryColumnCardinality;
+  }
+
+  public void setDictionaryColumnCardinality(int[] dictionaryColumnCardinality) {
+    this.dictionaryColumnCardinality = dictionaryColumnCardinality;
   }
 }
 
