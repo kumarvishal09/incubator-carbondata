@@ -42,36 +42,6 @@ public abstract class AbstractNonDictionaryVectorFiller {
 
 }
 
-class NonDictionaryVectorFillerFactory {
-
-  public static AbstractNonDictionaryVectorFiller getVectorFiller(int length, DataType type,
-      int numberOfRows, int actualDataLength) {
-    if (type == DataTypes.STRING) {
-      if (length > DataTypes.SHORT.getSizeInBytes()) {
-        return new LongStringVectorFiller(numberOfRows, actualDataLength);
-      } else {
-        return new StringVectorFiller(numberOfRows, actualDataLength);
-      }
-    } else if (type == DataTypes.VARCHAR || type == DataTypes.BINARY) {
-      return new LongStringVectorFiller(numberOfRows, actualDataLength);
-    } else if (type == DataTypes.TIMESTAMP) {
-      return new TimeStampVectorFiller(numberOfRows);
-    } else if (type == DataTypes.BOOLEAN) {
-      return new BooleanVectorFiller(numberOfRows);
-    } else if (type == DataTypes.SHORT) {
-      return new ShortVectorFiller(numberOfRows);
-    } else if (type == DataTypes.INT) {
-      return new IntVectorFiller(numberOfRows);
-    } else if (type == DataTypes.LONG) {
-      return new LongVectorFiller(numberOfRows);
-    } else {
-      throw new UnsupportedOperationException("Not supported datatype : " + type);
-    }
-
-  }
-
-}
-
 class StringVectorFiller extends AbstractNonDictionaryVectorFiller {
 
   private int actualDataLength;
@@ -281,6 +251,129 @@ class TimeStampVectorFiller extends AbstractNonDictionaryVectorFiller {
         vector.putLong(i, ByteUtil.toXorLong(data, localOffset, length) * 1000L);
       }
       localOffset += length;
+    }
+  }
+}
+
+class FixedBinaryVectorFillter extends AbstractNonDictionaryVectorFiller {
+
+  private int eachDataLen;
+
+  private int actualDataLen;
+
+  public FixedBinaryVectorFillter(int numberOfRows, int eachDataLength, int actualDataLen) {
+    super(numberOfRows);
+    this.eachDataLen = eachDataLength;
+    this.actualDataLen = actualDataLen;
+  }
+
+  @Override public void fillVector(byte[] data, CarbonColumnVector vector) {
+    boolean invertedIndex = vector instanceof ColumnarVectorWrapperDirectWithInvertedIndex
+        || vector instanceof SequentialFill;
+    if (invertedIndex) {
+      int localOffset = 0;
+      for (int i = 0; i < numberOfRows; i++) {
+        vector.putByteArray(i, localOffset, eachDataLen, data);
+        localOffset += eachDataLen;
+      }
+    } else {
+      int localOffset = 0;
+      for (int i = 0; i < numberOfRows; i++) {
+        vector.putArray(i, localOffset, eachDataLen);
+        localOffset += eachDataLen;
+      }
+      vector.putAllByteArray(data, 0, actualDataLen);
+    }
+  }
+}
+
+class BinaryVectorFiller extends AbstractNonDictionaryVectorFiller {
+
+  private DataType lengthStoredType;
+
+  private int actualDataLen;
+
+  public BinaryVectorFiller(int numberOfRows, DataType lengthStoredType,
+      int actualDataLen) {
+    super(numberOfRows);
+    this.lengthStoredType = lengthStoredType;
+    this.actualDataLen = actualDataLen;
+  }
+
+  @Override public void fillVector(byte[] data, CarbonColumnVector vector) {
+    boolean invertedIndex = vector instanceof ColumnarVectorWrapperDirectWithInvertedIndex
+        || vector instanceof SequentialFill;
+    if (invertedIndex) {
+      int localOffset = 0;
+      if (lengthStoredType == DataTypes.BYTE) {
+        for (int i = 0; i < numberOfRows; i++) {
+          int length = data[localOffset];
+          localOffset += 1;
+          vector.putByteArray(i, localOffset, length, data);
+          localOffset += length;
+        }
+      } else if (lengthStoredType == DataTypes.SHORT) {
+        for (int i = 0; i < numberOfRows; i++) {
+          int length = (((data[localOffset + 2] & 0xFF) << 8) | (data[localOffset + 3] & 0xFF));
+          localOffset += 2;
+          vector.putByteArray(i, localOffset, length, data);
+          localOffset += length;
+        }
+      } else if (lengthStoredType == DataTypes.SHORT_INT) {
+        for (int i = 0; i < numberOfRows; i++) {
+          int length =
+              (((data[localOffset + 1] & 0xFF) << 16) | ((data[localOffset + 2] & 0xFF) << 8) | (
+                  data[localOffset + 3] & 0xFF));
+          localOffset += 3;
+          vector.putByteArray(i, localOffset, length, data);
+          localOffset += length;
+        }
+      } else if (lengthStoredType == DataTypes.INT) {
+        for (int i = 0; i < numberOfRows; i++) {
+          int length =
+              (((data[localOffset] & 0xFF) << 24) | ((data[localOffset + 1] & 0xFF) << 16) | (
+                  (data[localOffset + 2] & 0xFF) << 8) | (data[localOffset + 3] & 0xFF));
+          localOffset += 4;
+          vector.putByteArray(i, localOffset, length, data);
+          localOffset += length;
+        }
+      }
+    } else {
+      int localOffset = 0;
+      if (lengthStoredType == DataTypes.BYTE) {
+        for (int i = 0; i < numberOfRows; i++) {
+          int length = data[localOffset];
+          localOffset += 1;
+          vector.putArray(i, localOffset, length);
+          localOffset += length;
+        }
+      } else if (lengthStoredType == DataTypes.SHORT) {
+        for (int i = 0; i < numberOfRows; i++) {
+          int length = (((data[localOffset + 2] & 0xFF) << 8) | (data[localOffset + 3] & 0xFF));
+          localOffset += 2;
+          vector.putArray(i, localOffset, length);
+          localOffset += length;
+        }
+      } else if (lengthStoredType == DataTypes.SHORT_INT) {
+        for (int i = 0; i < numberOfRows; i++) {
+          int length =
+              (((data[localOffset + 1] & 0xFF) << 16) | ((data[localOffset + 2] & 0xFF) << 8) | (
+                  data[localOffset + 3] & 0xFF));
+          localOffset += 3;
+          vector.putArray(i, localOffset, length);
+          localOffset += length;
+        }
+      } else if (lengthStoredType == DataTypes.INT) {
+        for (int i = 0; i < numberOfRows; i++) {
+          int length =
+              (((data[localOffset] & 0xFF) << 24) | ((data[localOffset + 1] & 0xFF) << 16) | (
+                  (data[localOffset + 2] & 0xFF) << 8) | (data[localOffset + 3] & 0xFF));
+          localOffset += 4;
+          vector.putArray(i, localOffset, length);
+          localOffset += length;
+        }
+      }
+      vector.putAllByteArray(data, 0, actualDataLen);
     }
   }
 }

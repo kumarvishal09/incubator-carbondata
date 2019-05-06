@@ -56,6 +56,11 @@ public class DimensionRawColumnChunk extends AbstractRawColumnChunk {
 
   private CarbonDictionary localDictionary;
 
+  /**
+   * true when binary/string/varchar data length part is written using adaptive
+   */
+  private boolean isAdaptiveForBinaryData;
+
   public DimensionRawColumnChunk(int columnIndex, ByteBuffer rawData, long offSet, int length,
       DimensionColumnChunkReader columnChunkReader) {
     super(columnIndex, rawData, offSet, length);
@@ -215,6 +220,14 @@ public class DimensionRawColumnChunk extends AbstractRawColumnChunk {
       return new CarbonDictionaryImpl(dictionary, usedDictionary.cardinality());
     }
     return null;
+  }
+
+  public void setAdaptiveForBinaryData(boolean isAdaptiveForBinaryData) {
+    this.isAdaptiveForBinaryData = isAdaptiveForBinaryData;
+  }
+
+  public boolean isAdaptiveForBinaryData() {
+    return isAdaptiveForBinaryData;
   }
 
 }

@@ -111,7 +111,9 @@ public interface DimensionColumnPage {
 
   /**
    * to get the null bit sets in case of adaptive encoded page
+   * method return presence meta which represents
+   * rowid for which values are null or not null
+   * @return
    */
   BitSet getNullBits();
-
 }

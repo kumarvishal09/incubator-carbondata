@@ -107,7 +107,8 @@ public abstract class SafeVariableLengthDimensionDataChunkStore
     vector.setDictionary(null);
     DataType dt = vector.getType();
     AbstractNonDictionaryVectorFiller vectorFiller = NonDictionaryVectorFillerFactory
-        .getVectorFiller(getLengthSize(), dt, numberOfRows, dataLength);
+        .getVectorFiller(getLengthSize(), dt, numberOfRows, dataLength, false, false, DataTypes.INT,
+            0);
     vector = ColumnarVectorWrapperDirectFactory
         .getDirectVectorWrapperFactory(vector, invertedIndex, new BitSet(), vectorInfo.deletedRows,
             false, false);

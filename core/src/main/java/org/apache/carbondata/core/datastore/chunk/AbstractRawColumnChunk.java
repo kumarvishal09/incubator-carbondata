@@ -17,6 +17,7 @@
 package org.apache.carbondata.core.datastore.chunk;
 
 import java.nio.ByteBuffer;
+import java.util.BitSet;
 
 import org.apache.carbondata.format.DataChunk3;
 
@@ -46,6 +47,8 @@ public abstract class AbstractRawColumnChunk {
   protected int length;
 
   private DataChunk3 dataChunkV3;
+
+  private BitSet[] nullBitsets;
 
   public AbstractRawColumnChunk(int columnIndex, ByteBuffer rawData, long offSet, int length) {
     this.columnIndex = columnIndex;
@@ -128,5 +131,13 @@ public abstract class AbstractRawColumnChunk {
 
   public void setMinMaxFlagArray(boolean[] minMaxFlagArray) {
     this.minMaxFlagArray = minMaxFlagArray;
+  }
+
+  public BitSet[] getNullBitsets() {
+    return nullBitsets;
+  }
+
+  public void setNullBitsets(BitSet[] nullBitsets) {
+    this.nullBitsets = nullBitsets;
   }
 }
