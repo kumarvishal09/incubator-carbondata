@@ -30,6 +30,7 @@ case class CarbonDatasourceHadoopRelation(
     paths: Array[String],
     parameters: Map[String, String],
     tableSchema: Option[StructType],
+    partitionSchema: Option[StructType],
     limit: Int = -1)
   extends BaseRelation {
 
@@ -42,7 +43,8 @@ case class CarbonDatasourceHadoopRelation(
 
   @transient lazy val carbonRelation: CarbonRelation =
     CarbonEnv.getInstance(sparkSession).carbonMetaStore.
-    createCarbonRelation(parameters, identifier, sparkSession)
+    createCarbonRelation(parameters, identifier, sparkSession,
+      tableSchema, partitionSchema,  parameters)
 
 
   @transient lazy val carbonTable: CarbonTable = carbonRelation.carbonTable

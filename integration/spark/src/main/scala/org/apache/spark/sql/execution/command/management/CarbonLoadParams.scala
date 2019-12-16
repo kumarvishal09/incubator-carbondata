@@ -26,12 +26,11 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.catalog.CatalogTable
 import org.apache.spark.sql.execution.command.UpdateTableModel
-import org.apache.spark.sql.execution.datasources.LogicalRelation
 
 import org.apache.carbondata.core.indexstore.PartitionSpec
 import org.apache.carbondata.core.statusmanager.SegmentStatus
-import org.apache.carbondata.core.util.CarbonProperties
 import org.apache.carbondata.events.OperationContext
 import org.apache.carbondata.processing.loading.model.CarbonLoadModel
 
@@ -45,7 +44,7 @@ case class CarbonLoadParams(
     isOverwriteTable: Boolean,
     carbonLoadModel: CarbonLoadModel,
     hadoopConf: Configuration,
-    logicalPartitionRelation: LogicalRelation,
+    catalogTable: CatalogTable,
     dateFormat : SimpleDateFormat,
     timeStampFormat : SimpleDateFormat,
     optionsOriginal: Map[String, String],

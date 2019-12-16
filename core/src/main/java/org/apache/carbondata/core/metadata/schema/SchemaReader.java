@@ -131,6 +131,19 @@ public class SchemaReader {
     return wrapperTableInfo;
   }
 
+  public static TableInfo inferSchemaFromFile(AbsoluteTableIdentifier identifier,
+      String filePath, Configuration configuration) throws IOException {
+
+    org.apache.carbondata.format.TableInfo tableInfo = CarbonUtil
+        .getTableInfo(identifier.getTableName(), configuration, filePath);
+    SchemaConverter schemaConverter = new ThriftWrapperSchemaConverterImpl();
+    TableInfo wrapperTableInfo = schemaConverter.fromExternalToWrapperTableInfo(
+        tableInfo, identifier.getDatabaseName(), identifier.getTableName(),
+        identifier.getTablePath());
+    wrapperTableInfo.setTransactionalTable(false);
+    return wrapperTableInfo;
+  }
+
   public static TableInfo inferSchema(AbsoluteTableIdentifier identifier,
       boolean isCarbonFileProvider) throws IOException {
 

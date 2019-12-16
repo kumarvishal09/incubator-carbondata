@@ -66,7 +66,7 @@ class CarbonSource extends CreatableRelationProvider with RelationProvider
       case Some(path) => CarbonDatasourceHadoopRelation(sqlContext.sparkSession,
         Array(path),
         newParameters,
-        None)
+        None, None)
       case _ =>
         val options = new CarbonOption(newParameters)
         val tablePath =
@@ -74,7 +74,7 @@ class CarbonSource extends CreatableRelationProvider with RelationProvider
         CarbonDatasourceHadoopRelation(sqlContext.sparkSession,
           Array(tablePath),
           newParameters,
-          None)
+          None, None)
     }
   }
 
@@ -138,7 +138,7 @@ class CarbonSource extends CreatableRelationProvider with RelationProvider
     val path = getPathForTable(sqlContext.sparkSession, dbName, tableName, newParameters)
 
     CarbonDatasourceHadoopRelation(sqlContext.sparkSession, Array(path), newParameters,
-      Option(dataSchema))
+      Option(dataSchema), None)
   }
 
   /**

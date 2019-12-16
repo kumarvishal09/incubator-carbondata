@@ -347,6 +347,8 @@ private[sql] case class CarbonProjectForUpdateCommand(
       case _ => sys.error("")
     }
 
+    val updateTableModel = new UpdateTableModel(true, currentTime, executorErrors, deletedSegments.toArray)
+
     val header = getHeader(carbonRelation, plan)
     val fields = dataFrame.schema.fields
     val otherFields = CarbonScalaUtil.getAllFieldsWithoutTupleIdField(fields)

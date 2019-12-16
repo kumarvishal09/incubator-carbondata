@@ -17,6 +17,7 @@
 
 package org.apache.carbondata.core.mutate.data;
 
+import java.util.HashMap;
 import java.util.Map;
 
 /**

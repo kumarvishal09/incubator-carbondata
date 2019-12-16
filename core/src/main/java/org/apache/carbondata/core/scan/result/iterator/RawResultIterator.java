@@ -17,6 +17,7 @@
 
 package org.apache.carbondata.core.scan.result.iterator;
 
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.Callable;
@@ -28,6 +29,9 @@ import org.apache.carbondata.common.CarbonIterator;
 import org.apache.carbondata.common.logging.LogServiceFactory;
 import org.apache.carbondata.core.constants.CarbonCommonConstants;
 import org.apache.carbondata.core.datastore.block.SegmentProperties;
+import org.apache.carbondata.core.scan.executor.QueryExecutor;
+import org.apache.carbondata.core.scan.executor.exception.QueryExecutionException;
+import org.apache.carbondata.core.scan.model.QueryModel;
 import org.apache.carbondata.core.scan.result.RowBatch;
 import org.apache.carbondata.core.util.CarbonProperties;
 
@@ -40,13 +44,13 @@ import org.apache.log4j.Logger;
  */
 public class RawResultIterator extends CarbonIterator<Object[]> {
 
-  protected final SegmentProperties sourceSegProperties;
+  protected SegmentProperties sourceSegProperties;
 
-  protected final SegmentProperties destinationSegProperties;
+  protected SegmentProperties destinationSegProperties;
   /**
    * Iterator of the Batch raw result.
    */
-  private CarbonIterator<RowBatch> detailRawQueryResultIterator;
+  protected CarbonIterator<RowBatch> detailRawQueryResultIterator;
 
   private boolean prefetchEnabled;
   private List<Object[]> currentBuffer;
@@ -67,20 +71,45 @@ public class RawResultIterator extends CarbonIterator<Object[]> {
   private static final Logger LOGGER =
       LogServiceFactory.getLogService(RawResultIterator.class.getName());
 
+  private QueryModel queryModel;
+
+  private QueryExecutor queryExecutor;
+
+  private boolean isExecuted;
+
   public RawResultIterator(CarbonIterator<RowBatch> detailRawQueryResultIterator,
       SegmentProperties sourceSegProperties, SegmentProperties destinationSegProperties,
       boolean init) {
+    this(sourceSegProperties, destinationSegProperties);
     this.detailRawQueryResultIterator = detailRawQueryResultIterator;
-    this.sourceSegProperties = sourceSegProperties;
-    this.destinationSegProperties = destinationSegProperties;
-    this.executorService = Executors.newFixedThreadPool(1);
-    batchSize = CarbonProperties.getQueryBatchSize();
     if (init) {
       init();
     }
   }
 
+  public RawResultIterator(QueryExecutor queryExecutor, SegmentProperties sourceSegProperties,
+      SegmentProperties destinationSegProperties, QueryModel queryModel) {
+    this(sourceSegProperties, destinationSegProperties);
+    this.queryExecutor = queryExecutor;
+    this.queryModel = queryModel;
+  }
+
+  public RawResultIterator(
+      SegmentProperties sourceSegProperties, SegmentProperties destinationSegProperties) {
+    this.sourceSegProperties = sourceSegProperties;
+    this.destinationSegProperties = destinationSegProperties;
+    this.executorService = Executors.newFixedThreadPool(1);
+    batchSize = CarbonProperties.getQueryBatchSize();
+  }
+
   protected void init() {
+    if (!isExecuted) {
+      try {
+        this.detailRawQueryResultIterator = queryExecutor.execute(queryModel);
+      } catch (IOException e) {
+        throw new RuntimeException(e);
+      }
+    }
     this.prefetchEnabled = CarbonProperties.getInstance().getProperty(
         CarbonCommonConstants.CARBON_COMPACTION_PREFETCH_ENABLE,
         CarbonCommonConstants.CARBON_COMPACTION_PREFETCH_ENABLE_DEFAULT).equalsIgnoreCase("true");
@@ -172,6 +201,10 @@ public class RawResultIterator extends CarbonIterator<Object[]> {
 
   @Override
   public boolean hasNext() {
+    if (!isExecuted) {
+      init();
+      isExecuted = true;
+    }
     fillDataFromPrefetch();
     return currentIdxInBuffer < currentBuffer.size();
   }
@@ -200,6 +233,14 @@ public class RawResultIterator extends CarbonIterator<Object[]> {
   }
 
   public void close() {
+    if (null != queryExecutor) {
+      try {
+        queryExecutor.finish();
+      } catch (QueryExecutionException e) {
+        e.printStackTrace();
+      }
+      queryExecutor = null;
+    }
     if (null != executorService) {
       executorService.shutdownNow();
     }

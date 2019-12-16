@@ -91,7 +91,8 @@ class MergeIndexEventListener extends OperationEventListener with Logging {
             metrics.setMergeIndexSize(indexSize)
             loadModel.setMetrics(metrics)
             LOGGER.info("Total time taken for merge index " +
-                        (System.currentTimeMillis() - startTime))
+                        (System.currentTimeMillis() - startTime) + "for table: " +
+                        carbonTable.getTableUniqueName)
             // clear Block index Cache
             MergeIndexUtil.clearBlockIndexCache(carbonTable, Seq(loadModel.getSegmentId))
           }

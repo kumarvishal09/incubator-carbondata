@@ -67,8 +67,11 @@ public class SliceStreamReader extends CarbonColumnVectorImpl implements PrestoV
       int[] dataArray;
       if (isLocalDict) {
         dataArray = (int[]) ((CarbonColumnVectorImpl) getDictionaryVector()).getDataArray();
+        int[] temp = new int[batchSize];
+        System.arraycopy(dataArray, 0, temp, 0, batchSize);
+        dataArray = temp;
       } else {
-        dataArray = (int[]) getDataArray();
+        dataArray = ((int[]) getDataArray()).clone();
       }
       positionCount = isLocalDictEnabledForComplextype ? positionCount : batchSize;
       return new DictionaryBlock(positionCount, dictionaryBlock, dataArray);
@@ -166,6 +169,10 @@ public class SliceStreamReader extends CarbonColumnVectorImpl implements PrestoV
         builder.appendNull();
       }
     }
+  }
+
+  @Override public void putArray(int rowId, int offset, int length) {
+    type.writeSlice(builder, wrappedBuffer(byteArr), offset, length);
   }
 
   @Override

@@ -113,6 +113,12 @@ public class RowLevelRangeLessThanEqualFilterExecutorImpl extends RowLevelFilter
   }
 
   @Override
+  public BitSet isScanRequired(MinMaxPruneMetadata minMaxPruneMetadata) {
+    return isScanRequired(minMaxPruneMetadata.getBlockMaxValue(),
+        minMaxPruneMetadata.getBlockMinValue(), minMaxPruneMetadata.getIsMinMaxSet());
+  }
+
+  @Override
   public BitSet isScanRequired(byte[][] blockMaxValue, byte[][] blockMinValue,
       boolean[] isMinMaxSet) {
     BitSet bitSet = new BitSet(1);

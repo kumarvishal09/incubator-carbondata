@@ -71,6 +71,7 @@ object SparkTestQueryExecutor {
     .config("spark.sql.warehouse.dir", warehouse)
     .config("spark.sql.crossJoin.enabled", "true")
     .config("spark.sql.extensions", extensions)
+    .config("spark.hbase.connector.test", "true")
     .getOrCreate()
   spark.experimental.extraOptimizations = Seq(new CarbonFileIndexReplaceRule)
   CarbonEnv.getInstance(spark)

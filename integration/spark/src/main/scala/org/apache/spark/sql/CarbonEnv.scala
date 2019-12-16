@@ -42,6 +42,7 @@ import org.apache.carbondata.events._
 import org.apache.carbondata.geo.GeoUdfRegister
 import org.apache.carbondata.index.{TextMatchMaxDocUDF, TextMatchUDF}
 import org.apache.carbondata.processing.loading.events.LoadEvents.{LoadTablePostExecutionEvent, LoadTablePostStatusUpdateEvent, LoadTablePreExecutionEvent, LoadTablePreStatusUpdateEvent}
+import org.apache.carbondata.segment.{ExcludeSegmentIdUDF, SegmentIdUDF}
 import org.apache.carbondata.spark.rdd.SparkReadSupport
 import org.apache.carbondata.spark.readsupport.SparkRowReadSupportImpl
 import org.apache.carbondata.view.{MVFunctions, TimeSeriesFunction}
@@ -98,6 +99,9 @@ class CarbonEnv {
 
     // register udf for spatial index filters of querying
     GeoUdfRegister.registerQueryFilterUdf(sparkSession)
+    sparkSession.udf.register("segmentId", new SegmentIdUDF)
+    sparkSession.udf.register("excludesegmentId", new ExcludeSegmentIdUDF)
+
 
     // register udf for spatial index utils
     GeoUdfRegister.registerUtilUdf(sparkSession)

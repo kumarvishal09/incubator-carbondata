@@ -52,7 +52,10 @@ trait CarbonMetaStore {
    */
   def createCarbonRelation(parameters: Map[String, String],
       absIdentifier: AbsoluteTableIdentifier,
-      sparkSession: SparkSession): CarbonRelation
+      sparkSession: SparkSession,
+      schema: Option[StructType],
+      partitionSchema: Option[StructType],
+      options: Map[String, String]): CarbonRelation
 
 
   def tableExists(

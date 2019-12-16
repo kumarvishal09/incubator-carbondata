@@ -110,7 +110,7 @@ public final class CarbonCommonConstants {
   /**
    * default value
    */
-  public static final String CARBON_TIMESTAMP_DEFAULT_FORMAT = "yyyy-MM-dd HH:mm:ss";
+  public static final String CARBON_TIMESTAMP_DEFAULT_FORMAT = "yyyy-MM-dd HH:mm:ss:SSS";
 
   /**
    * CARBON_TIMESTAMP
@@ -431,12 +431,12 @@ public final class CarbonCommonConstants {
   /**
    * default value for local dictionary
    */
-  public static final String LOCAL_DICTIONARY_THRESHOLD_DEFAULT = "10000";
+  public static final String LOCAL_DICTIONARY_THRESHOLD_DEFAULT = "32000";
 
   /**
    * max dictionary threshold
    */
-  public static final int LOCAL_DICTIONARY_MAX = 100000;
+  public static final int LOCAL_DICTIONARY_MAX = 32000;
 
   /**
    * min dictionary threshold
@@ -478,7 +478,7 @@ public final class CarbonCommonConstants {
   public static final String TABLE_BLOCKSIZE = "table_blocksize";
 
   // default block size in MB
-  public static final String TABLE_BLOCK_SIZE_DEFAULT = "1024";
+  public static final String TABLE_BLOCK_SIZE_DEFAULT = "256";
 
   // table blocklet size in MB
   public static final String TABLE_BLOCKLET_SIZE = "table_blocklet_size";
@@ -946,7 +946,7 @@ public final class CarbonCommonConstants {
   /**
    * to enable offheap sort
    */
-  public static final String ENABLE_OFFHEAP_SORT_DEFAULT = "true";
+  public static final String ENABLE_OFFHEAP_SORT_DEFAULT = "false";
 
   @CarbonProperty
   public static final String OFFHEAP_SORT_CHUNK_SIZE_IN_MB = "offheap.sort.chunk.size.inmb";
@@ -1347,7 +1347,7 @@ public final class CarbonCommonConstants {
   @CarbonProperty
   public static final String ENABLE_TABLE_STATUS_BACKUP = "carbon.enable.tablestatus.backup";
 
-  public static final String ENABLE_TABLE_STATUS_BACKUP_DEFAULT = "false";
+  public static final String ENABLE_TABLE_STATUS_BACKUP_DEFAULT = "true";
 
   /**
    * property to set is IS_DRIVER_INSTANCE
@@ -1705,7 +1705,7 @@ public final class CarbonCommonConstants {
 
   public static final String VIEWFSURL_PREFIX = "viewfs://";
 
-  public static final String ALLUXIOURL_PREFIX = "alluxio://";
+  public static final String ALLUXIOURL_PREFIX = "alluxio:/";
 
   public static final String S3_PREFIX = "s3://";
 
@@ -2156,7 +2156,7 @@ public final class CarbonCommonConstants {
   public static final int MAX_CHARS_PER_COLUMN_DEFAULT = 32000;
   // todo: use infinity first, will switch later
   public static final int MAX_CHARS_PER_COLUMN_INFINITY = -1;
-  public static final short LOCAL_DICT_ENCODED_BYTEARRAY_SIZE = 3;
+  public static final short LOCAL_DICT_ENCODED_BYTEARRAY_SIZE = 2;
   public static final int CARBON_MINMAX_ALLOWED_BYTE_COUNT_MIN = 10;
   public static final int CARBON_MINMAX_ALLOWED_BYTE_COUNT_MAX = 1000;
 
@@ -2616,5 +2616,16 @@ public final class CarbonCommonConstants {
   public static final String CARBON_MAP_ORDER_PUSHDOWN = "carbon.mapOrderPushDown";
 
   public static final String CARBON_SDK_EMPTY_METADATA_PATH = "emptyMetadataFolder";
+
+
+  public static final String CARBON_MIN_THREASHOLD_FOR_SEGMENT_MERGER =
+      "carbon.min.threashold.for.segment.merger";
+
+  public static final String CARBON_MIN_THREASHOLD_FOR_SEGMENT_MERGER_DEFAULT = "80";
+
+  public static final String CARBON_MERGE_WITHIN_SEGMENT = "carbon.merge.with.in.segment";
+
+  public static final String CARBON_MERGE_WITHIN_SEGMENT_DEFAULT = "false";
+
 
 }

@@ -23,6 +23,6 @@ import org.apache.spark.sql.execution.datasources.{FilePartition, PartitionedFil
 
 object CarbonToSparkAdapter {
   def createFilePartition(index: Int, files: ArrayBuffer[PartitionedFile]) = {
-    FilePartition(index, files.toArray.toSeq)
+    FilePartition(index, files)
   }
 }

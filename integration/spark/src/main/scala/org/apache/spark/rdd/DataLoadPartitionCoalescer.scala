@@ -71,7 +71,8 @@ class DataLoadPartitionCoalescer(prev: RDD[_], nodeList: Array[String]) {
 
   private val LOGGER = LogServiceFactory.getLogService(this.getClass.getCanonicalName)
   val prevPartitions = prev.partitions
-  val numOfParts = Math.max(1, Math.min(nodeList.length, prevPartitions.length))
+//  val numOfParts = Math.max(1, Math.min(nodeList.length, prevPartitions.length))
+  val numOfParts = Math.max(1, prevPartitions.length)
   // host => partition id list
   val hostMapPartitionIds = new HashMap[String, LinkedHashSet[Int]]
   // partition id => host list
@@ -326,6 +327,7 @@ class DataLoadPartitionCoalescer(prev: RDD[_], nodeList: Array[String]) {
   def run(): Array[Partition] = {
     // 1. group partitions by node
     groupByNode()
+    noLocality = true
     LOGGER.info(s"partition: ${prevPartitions.length}, no locality: ${noLocalityPartitions.length}")
     val partitions = if (noLocality) {
       // 2.A no locality partition

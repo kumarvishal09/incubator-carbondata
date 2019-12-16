@@ -116,19 +116,30 @@ case class AlterTableModel(
     factTimeStamp: Option[Long],
     customSegmentIds: Option[List[String]] = None)
 
-case class UpdateTableModel(
-    isUpdate: Boolean,
-    updatedTimeStamp: Long,
+class UpdateTableModel(
+    var isUpdate: Boolean,
+    var updatedTimeStamp: Long,
     var executorErrors: ExecutionErrors,
-    deletedSegments: Seq[Segment],
-    var insertedSegment: Option[String])
+    var deletedSegments: Array[Segment],
+    var insertedSegment: Option[String],
+    var loadAsNewSegment: Boolean = false) extends Serializable {
+  def copyFrom(updateTableModel: UpdateTableModel): UpdateTableModel = {
+    updatedTimeStamp = updateTableModel.updatedTimeStamp
+    executorErrors = updateTableModel.executorErrors
+    deletedSegments = updateTableModel.deletedSegments
+    insertedSegment = updateTableModel.insertedSegment
+    loadAsNewSegment = updateTableModel.loadAsNewSegment
+    this
+  }
+}
 
 case class CompactionModel(compactionSize: Long,
     compactionType: CompactionType,
     carbonTable: CarbonTable,
     isDDLTrigger: Boolean,
     currentPartitions: Option[Seq[PartitionSpec]],
-    customSegmentIds: Option[List[String]])
+    customSegmentIds: Option[List[String]],
+    compactWithInSegment : Boolean = false)
 
 case class CompactionCallableModel(carbonLoadModel: CarbonLoadModel,
     carbonTable: CarbonTable,
@@ -137,7 +148,8 @@ case class CompactionCallableModel(carbonLoadModel: CarbonLoadModel,
     compactionType: CompactionType,
     currentPartitions: Option[Seq[PartitionSpec]],
     compactedSegments: java.util.List[String],
-    var compactedPartitions: Option[Seq[PartitionSpec]] = None)
+    var compactedPartitions: Option[Seq[PartitionSpec]] = None,
+    compactWithInSegment: Boolean = false)
 
 case class AlterPartitionModel(carbonLoadModel: CarbonLoadModel,
     segmentId: String,

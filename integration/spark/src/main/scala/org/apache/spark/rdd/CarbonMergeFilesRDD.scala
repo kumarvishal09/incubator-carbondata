@@ -167,7 +167,7 @@ object CarbonMergeFilesRDD {
             executorService.submit(new Runnable {
               override def run(): Unit = {
                 ThreadLocalSessionInfo.setCarbonSessionInfo(carbonSessionInfo)
-                FileFactory.deleteAllCarbonFilesOfDir(
+                FileFactory.deleteAllCarbonFilesOfDirNonRecursive(
                   FileFactory.getCarbonFile(partitionPath + "/" + tempFolderPath))
               }
             })

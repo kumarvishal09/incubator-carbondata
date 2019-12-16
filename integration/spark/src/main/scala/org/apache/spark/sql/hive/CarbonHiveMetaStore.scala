@@ -20,10 +20,12 @@ import scala.collection.JavaConverters._
 
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.catalog.CatalogTable
+import org.apache.spark.sql.types.StructType
 
 import org.apache.carbondata.core.datastore.block.SegmentPropertiesAndSchemaHolder
 import org.apache.carbondata.core.index.IndexStoreManager
-import org.apache.carbondata.core.metadata.{AbsoluteTableIdentifier, CarbonMetadata, CarbonTableIdentifier}
+import org.apache.carbondata.core.metadata.{AbsoluteTableIdentifier, CarbonMetadata, CarbonTableIdentifier, schema}
 import org.apache.carbondata.core.metadata.converter.ThriftWrapperSchemaConverterImpl
 import org.apache.carbondata.core.metadata.schema
 import org.apache.carbondata.core.metadata.schema.table.CarbonTable
@@ -48,13 +50,17 @@ class CarbonHiveMetaStore extends CarbonFileMetastore {
    */
   override def createCarbonRelation(parameters: Map[String, String],
       absIdentifier: AbsoluteTableIdentifier,
-      sparkSession: SparkSession): CarbonRelation = {
+      sparkSession: SparkSession,
+      schema: Option[StructType],
+      partitionSchema: Option[StructType],
+      options: Map[String, String]): CarbonRelation = {
     val info = CarbonUtil.convertGsonToTableInfo(parameters.asJava)
     val carbonRelation = if (info != null) {
       val table = CarbonTable.buildFromTableInfo(info)
       CarbonRelation(info.getDatabaseName, info.getFactTable.getTableName, table)
     } else {
-      super.createCarbonRelation(parameters, absIdentifier, sparkSession)
+      super.createCarbonRelation(parameters, absIdentifier, sparkSession, schema,
+        partitionSchema,  options)
     }
     carbonRelation.refresh()
     carbonRelation

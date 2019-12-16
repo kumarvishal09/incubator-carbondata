@@ -123,7 +123,7 @@ class PrestoTestNonTransactionalTableFiles
     // Build Varchar Column data
     var varcharValue: String = {
       if (varcharDataGen) {
-        RandomStringUtils.randomAlphabetic(32001)
+        Random.nextString(32001)
       } else {
         "a"
       }

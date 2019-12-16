@@ -35,10 +35,10 @@ import org.apache.carbondata.core.metadata.schema.table.TableInfo;
 import org.apache.carbondata.core.metadata.schema.table.column.CarbonColumn;
 import org.apache.carbondata.core.util.CarbonUtil;
 import org.apache.carbondata.core.util.path.CarbonTablePath;
+import org.apache.carbondata.hive.util.CarbonArrayWritableObjectInspector;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hive.metastore.api.hive_metastoreConstants;
-import org.apache.hadoop.hive.ql.io.parquet.serde.ArrayWritableObjectInspector;
 import org.apache.hadoop.hive.serde.serdeConstants;
 import org.apache.hadoop.hive.serde2.AbstractSerDe;
 import org.apache.hadoop.hive.serde2.SerDeException;
@@ -108,7 +108,7 @@ public class CarbonHiveSerDe extends AbstractSerDe {
 
     // Create row related objects
     rowTypeInfo = TypeInfoFactory.getStructTypeInfo(columnNames, columnTypes);
-    this.objInspector = new ArrayWritableObjectInspector((StructTypeInfo) rowTypeInfo);
+    this.objInspector = new CarbonArrayWritableObjectInspector((StructTypeInfo) rowTypeInfo);
     // Stats part
     serializedSize = 0;
     deserializedSize = 0;

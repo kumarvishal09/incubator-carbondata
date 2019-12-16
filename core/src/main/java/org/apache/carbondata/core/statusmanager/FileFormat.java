@@ -64,6 +64,10 @@ public class FileFormat implements Serializable {
         this.format.equalsIgnoreCase("ROW_V1"));
   }
 
+  public String getFormat() {
+    return format;
+  }
+
   @Override
   public boolean equals(Object o) {
     if (this == o) return true;

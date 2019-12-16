@@ -25,8 +25,10 @@ import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ExecutionException;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import org.apache.carbondata.common.exceptions.DeprecatedFeatureException;
 import org.apache.carbondata.common.logging.LogServiceFactory;
@@ -89,6 +91,9 @@ public class CarbonTableInputFormat<T> extends CarbonInputFormat<T> {
   // comma separated list of input segment numbers
   public static final String INPUT_SEGMENT_NUMBERS =
       "mapreduce.input.carboninputformat.segmentnumbers";
+  // comma separated list of input segment numbers
+  public static final String PRUNED_SEGMENT_NUMBERS =
+      "mapreduce.input.carboninputformat.prunedsegmentnumbers";
   // comma separated list of input files
   public static final String INPUT_FILES = "mapreduce.input.carboninputformat.files";
   private static final Logger LOG =
@@ -98,6 +103,7 @@ public class CarbonTableInputFormat<T> extends CarbonInputFormat<T> {
   public static final String DATABASE_NAME = "mapreduce.input.carboninputformat.databaseName";
   public static final String TABLE_NAME = "mapreduce.input.carboninputformat.tableName";
   public static final String UPDATE_DELTA_VERSION = "updateDeltaVersion";
+  public static final String UPDATE_STATUS_VERSION = "updateStatusVersion";
   // a cache for carbon table, it will be used in task side
   private CarbonTable carbonTable;
   private ReadCommittedScope readCommittedScope;
@@ -110,6 +116,12 @@ public class CarbonTableInputFormat<T> extends CarbonInputFormat<T> {
    */
   @Override
   public List<InputSplit> getSplits(JobContext job) throws IOException {
+    List<InputSplit> splits = new LinkedList<>();
+    // get all valid segments and set them into the configuration
+    String[] prunedSegment = getPrunedSegment(job);
+    if (prunedSegment.length == 1 && prunedSegment[0].equalsIgnoreCase("None")) {
+      return splits;
+    }
     carbonTable = getOrCreateCarbonTable(job.getConfiguration());
     if (null == carbonTable) {
       throw new IOException("Missing/Corrupt schema file for table.");
@@ -119,8 +131,6 @@ public class CarbonTableInputFormat<T> extends CarbonInputFormat<T> {
         CarbonCommonConstants.DICTIONARY_INCLUDE)) {
       DeprecatedFeatureException.globalDictNotSupported();
     }
-
-    List<InputSplit> splits = new LinkedList<>();
 
     if (CarbonProperties.isQueryStageInputEnabled()) {
       // If there are stage files, collect them and create splits so that they are
@@ -137,39 +147,58 @@ public class CarbonTableInputFormat<T> extends CarbonInputFormat<T> {
     this.readCommittedScope = getReadCommitted(job, carbonTable.getAbsoluteTableIdentifier());
     LoadMetadataDetails[] loadMetadataDetails = readCommittedScope.getSegmentList();
     String updateDeltaVersion = job.getConfiguration().get(UPDATE_DELTA_VERSION);
+    String updateStatusVersion = job.getConfiguration().get(UPDATE_STATUS_VERSION);
     SegmentUpdateStatusManager updateStatusManager;
     if (updateDeltaVersion != null) {
       updateStatusManager =
-          new SegmentUpdateStatusManager(carbonTable, loadMetadataDetails, updateDeltaVersion);
+          new SegmentUpdateStatusManager(carbonTable, loadMetadataDetails, updateDeltaVersion,
+              updateStatusVersion);
     } else {
       updateStatusManager =
           new SegmentUpdateStatusManager(carbonTable, loadMetadataDetails);
     }
     List<String> invalidSegmentIds = new ArrayList<>();
     List<Segment> streamSegments = null;
-    // get all valid segments and set them into the configuration
+
+    Set<String> prunedSegs = new HashSet<>(Arrays.asList(prunedSegment));
     SegmentStatusManager segmentStatusManager =
         new SegmentStatusManager(carbonTable.getAbsoluteTableIdentifier(),
             readCommittedScope.getConfiguration());
     SegmentStatusManager.ValidAndInvalidSegmentsInfo segments = segmentStatusManager
         .getValidAndInvalidSegments(carbonTable.isMV(), loadMetadataDetails,
-            this.readCommittedScope);
+            this.readCommittedScope, prunedSegs);
 
     if (getValidateSegmentsToAccess(job.getConfiguration())) {
       List<Segment> validSegments = segments.getValidSegments();
       streamSegments = segments.getStreamSegments();
       streamSegments = getFilteredSegment(job, streamSegments, true, readCommittedScope);
+      List<Segment> prunedInProgressSeg = segments.getListOfInProgressSegments().stream()
+          .filter(segment -> prunedSegs.contains(segment.getSegmentNo()))
+          .collect(Collectors.toList());
       if (validSegments.size() == 0) {
         splits.addAll(getSplitsOfStreaming(job, streamSegments, carbonTable));
-        return splits;
+        if (prunedInProgressSeg.isEmpty()) {
+          return splits;
+        }
       }
       List<Segment> filteredSegmentToAccess =
           getFilteredSegment(job, segments.getValidSegments(), true, readCommittedScope);
+      Segment[] segmentsToAccess = getSegmentsToAccess(job, readCommittedScope);
+      if (segmentsToAccess.length > 0) {
+        filteredSegmentToAccess.addAll(
+            getFilteredSegment(job, segments.getListOfInProgressSegments(), true,
+                readCommittedScope));
+      }
+      if (!prunedInProgressSeg.isEmpty()) {
+        filteredSegmentToAccess
+            .addAll(getFilteredSegment(job, prunedInProgressSeg, true, readCommittedScope));
+      }
       if (filteredSegmentToAccess.size() == 0) {
         splits.addAll(getSplitsOfStreaming(job, streamSegments, carbonTable));
         return splits;
       } else {
-        setSegmentsToAccess(job.getConfiguration(), filteredSegmentToAccess);
+        setSegmentsToAccess(job.getConfiguration(),
+            new ArrayList<>(new HashSet<>(filteredSegmentToAccess)));
       }
 
       // remove entry in the segment index if there are invalid segments
@@ -431,6 +460,16 @@ public class CarbonTableInputFormat<T> extends CarbonInputFormat<T> {
     return segments.toArray(new Segment[segments.size()]);
   }
 
+  /**
+   * return valid segment to access
+   */
+  public String[] getPrunedSegment(JobContext job) {
+    String segmentString = job.getConfiguration().get(PRUNED_SEGMENT_NUMBERS, "");
+    if (segmentString.trim().isEmpty()) {
+      return new String[0];
+    }
+    return Stream.of(segmentString.split(",")).map(f -> f.split("#")[0]).toArray(String[]::new);
+  }
   /**
    * Get the row count of the Block and mapping of segment and Block count.
    */

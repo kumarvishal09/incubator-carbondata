@@ -23,13 +23,8 @@ import org.apache.carbondata.core.datastore.impl.FileFactory;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hive.metastore.HiveMetaHook;
-import org.apache.hadoop.hive.metastore.api.LockType;
-import org.apache.hadoop.hive.metastore.api.MetaException;
-import org.apache.hadoop.hive.metastore.api.Table;
-import org.apache.hadoop.hive.ql.hooks.WriteEntity;
 import org.apache.hadoop.hive.ql.metadata.HiveException;
 import org.apache.hadoop.hive.ql.metadata.HiveStorageHandler;
-import org.apache.hadoop.hive.ql.metadata.StorageHandlerInfo;
 import org.apache.hadoop.hive.ql.plan.TableDesc;
 import org.apache.hadoop.hive.ql.security.authorization.HiveAuthorizationProvider;
 import org.apache.hadoop.hive.serde2.AbstractSerDe;
@@ -73,11 +68,6 @@ public class CarbonStorageHandler implements HiveStorageHandler {
   }
 
   @Override
-  public void configureInputJobCredentials(TableDesc tableDesc, Map<String, String> map) {
-
-  }
-
-  @Override
   public void configureOutputJobProperties(TableDesc tableDesc, Map<String, String> jobProperties) {
 
   }
@@ -90,16 +80,6 @@ public class CarbonStorageHandler implements HiveStorageHandler {
   @Override
   public void configureJobConf(TableDesc tableDesc, JobConf jobConf) {
 
-  }
-
-  @Override
-  public StorageHandlerInfo getStorageHandlerInfo(Table table) throws MetaException {
-    return null;
-  }
-
-  @Override
-  public LockType getLockType(WriteEntity writeEntity) {
-    return null;
   }
 
   @Override

@@ -61,6 +61,17 @@ public interface FilterExecutor {
   BitSet isScanRequired(byte[][] blockMaxValue, byte[][] blockMinValue, boolean[] isMinMaxSet);
 
   /**
+   *
+   * @param minMaxPruneMetadata
+   * @return
+   */
+  default BitSet isScanRequired(MinMaxPruneMetadata minMaxPruneMetadata) {
+    BitSet bitSet = new BitSet(1);
+    bitSet.flip(0, 1);
+    return bitSet;
+  }
+
+  /**
    * It just reads necessary block for filter executor, it does not uncompress the data.
    *
    * @param rawBlockletColumnChunks

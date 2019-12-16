@@ -61,13 +61,14 @@ case class CarbonInsertIntoWithDf(databaseNameOp: Option[String],
     val LOGGER = LogServiceFactory.getLogService(this.getClass.getName)
     ThreadLocalSessionInfo
       .setConfigurationToCurrentThread(sparkSession.sessionState.newHadoopConf())
-    val (sizeInBytes, table, dbName, logicalPartitionRelation, finalPartition) = CommonLoadUtils
+    val (sizeInBytes, table, dbName, catalogTable, finalPartition) = CommonLoadUtils
       .processMetadataCommon(
         sparkSession,
         databaseNameOp,
         tableName,
         tableInfoOp,
         partition)
+    LOGGER.info(s"Started Load for ${dbName}.${table}")
     val hadoopConf = sparkSession.sessionState.newHadoopConf()
     CarbonProperties.getInstance().addProperty("zookeeper.enable.lock", "false")
     val factPath = ""
@@ -104,7 +105,7 @@ case class CarbonInsertIntoWithDf(databaseNameOp: Option[String],
           operationContext = operationContext)
 
       // add the start entry for the new load in the table status file
-      if ((updateModel.isEmpty || updateModel.isDefined)
+      if ((updateModel.isEmpty || updateModel.isDefined  && updateModel.get.loadAsNewSegment)
           && !table.isHivePartitionTable) {
         if (updateModel.isDefined) {
           carbonLoadModel.setFactTimeStamp(updateModel.get.updatedTimeStamp)
@@ -134,7 +135,7 @@ case class CarbonInsertIntoWithDf(databaseNameOp: Option[String],
         isOverwriteTable,
         carbonLoadModel,
         hadoopConf,
-        logicalPartitionRelation,
+        catalogTable,
         dateFormat,
         timeStampFormat,
         options,
@@ -145,7 +146,7 @@ case class CarbonInsertIntoWithDf(databaseNameOp: Option[String],
         None,
         updateModel,
         operationContext)
-
+      LOGGER.info(s"Segment No. Assigned for table ${dbName}.${tableName} : ${carbonLoadModel.getSegmentId}")
       LOGGER.info("Sort Scope : " + carbonLoadModel.getSortScope)
       val (rows, loadResult) = insertData(loadParams)
       if (updateModel.isDefined) {
@@ -178,12 +179,17 @@ case class CarbonInsertIntoWithDf(databaseNameOp: Option[String],
         }
         throw ex
     }
+    LOGGER.info(s"Finished Load for  ${dbName}.${table}")
     Seq.empty
   }
 
   def insertData(loadParams: CarbonLoadParams): (Seq[Row], LoadMetadataDetails) = {
     var rows = Seq.empty[Row]
-    val loadDataFrame = Some(dataFrame)
+    val loadDataFrame = if (updateModel.isDefined && !updateModel.get.loadAsNewSegment) {
+      Some(CommonLoadUtils.getDataFrameWithTupleID(Some(dataFrame)))
+    } else {
+      Some(dataFrame)
+    }
     val table = loadParams.carbonLoadModel.getCarbonDataLoadSchema.getCarbonTable
     var loadResult : LoadMetadataDetails = null
     loadParams.dataFrame = loadDataFrame

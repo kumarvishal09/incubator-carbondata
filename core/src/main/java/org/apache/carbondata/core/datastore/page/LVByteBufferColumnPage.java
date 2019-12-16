@@ -52,6 +52,8 @@ public class LVByteBufferColumnPage extends ColumnPage {
   // the length of bytes added in the page
   protected int totalLength;
 
+  private boolean isCleaned;
+
   LVByteBufferColumnPage(ColumnPageEncoderMeta columnPageEncoderMeta, int pageSize) {
     super(columnPageEncoderMeta, pageSize);
     checkDataType(columnPageEncoderMeta);
@@ -137,6 +139,7 @@ public class LVByteBufferColumnPage extends ColumnPage {
 
   @Override
   public ByteBuffer getByteBuffer() {
+    isCleaned = true;
     return byteBuffer;
   }
 
@@ -375,12 +378,12 @@ public class LVByteBufferColumnPage extends ColumnPage {
 
   @Override
   public void freeMemory() {
+    if(!isCleaned) {
+      UnsafeMemoryManager.destroyDirectByteBuffer(byteBuffer);
+    }
     if (null != rowOffset) {
       rowOffset.freeMemory();
       rowOffset = null;
-    }
-    if (null != byteBuffer) {
-      UnsafeMemoryManager.destroyDirectByteBuffer(byteBuffer);
     }
   }
 

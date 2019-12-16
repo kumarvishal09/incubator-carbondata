@@ -21,7 +21,7 @@ import org.apache.spark.sql.catalyst.parser.ParserInterface
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.strategy.{CarbonSourceStrategy, DDLStrategy, DMLStrategy, StreamingTableStrategy}
-import org.apache.spark.sql.hive.{CarbonIUDAnalysisRule, CarbonLoadDataAnalyzeRule, CarbonPreInsertionCasts}
+import org.apache.spark.sql.hive.{CarbonIUDAnalysisRule, CarbonLoadDataAnalyzeRule, CarbonPreInsertionCasts, CarbonRelationConversions}
 import org.apache.spark.sql.parser.CarbonExtensionSqlParser
 
 /**
@@ -39,6 +39,8 @@ class CarbonExtensions extends (SparkSessionExtensions => Unit) {
     // carbon analyzer rules
     extensions
       .injectResolutionRule((session: SparkSession) => CarbonIUDAnalysisRule(session))
+    extensions
+      .injectResolutionRule((session: SparkSession) => CarbonRelationConversions(session))
     extensions
       .injectResolutionRule((session: SparkSession) => CarbonPreInsertionCasts(session))
     extensions

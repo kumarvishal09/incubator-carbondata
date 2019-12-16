@@ -826,7 +826,8 @@ public abstract class ColumnPage {
     } else if (isLVEncoded && storeDataType == BYTE_ARRAY &&
         columnSpec.getColumnType() == ColumnType.COMPLEX_PRIMITIVE) {
       byte[] lvVarBytes = compressor.unCompressByte(compressedData, offset, length);
-      return newFixedByteArrayPage(columnSpec, lvVarBytes, 3, meta.getCompressorName());
+      return newFixedByteArrayPage(columnSpec, lvVarBytes,
+          CarbonCommonConstants.LOCAL_DICT_ENCODED_BYTEARRAY_SIZE, meta.getCompressorName());
     } else if (storeDataType == BYTE_ARRAY
         && columnSpec.getColumnType() == ColumnType.COMPLEX_STRUCT) {
       byte[] lvVarBytes = compressor.unCompressByte(compressedData, offset, length);

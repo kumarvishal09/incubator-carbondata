@@ -437,7 +437,7 @@ public abstract class AbstractFactDataWriter implements CarbonFactDataWriter {
           + CarbonTablePath.getCarbonIndexFileName(model.getCarbonDataFileAttributes().getTaskId(),
           model.getBucketId(), model.getTaskExtension(),
           "" + model.getCarbonDataFileAttributes().getFactTimeStamp(), model.getSegmentId());
-      indexFileName = FileFactory.getUpdatedFilePath(rawFileName);
+      indexFileName = rawFileName;
     } else {
       // randomly choose a temp location for index file
       String[] tempLocations = model.getStoreLocation();

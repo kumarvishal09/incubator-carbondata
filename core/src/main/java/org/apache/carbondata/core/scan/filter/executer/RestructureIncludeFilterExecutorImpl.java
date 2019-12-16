@@ -68,6 +68,13 @@ public class RestructureIncludeFilterExecutorImpl extends RestructureEvaluatorIm
   }
 
   @Override
+  public BitSet isScanRequired(MinMaxPruneMetadata minMaxPruneMetadata) {
+    BitSet bitSet = new BitSet(1);
+    bitSet.set(0, isDefaultValuePresentInFilterValues);
+    return bitSet;
+  }
+
+  @Override
   public void readColumnChunks(RawBlockletColumnChunks rawBlockletColumnChunks) {
 
   }

@@ -17,8 +17,8 @@
 
 package org.apache.spark.sql.carbondata.execution.datasources
 
+import java.io.IOException
 import java.net.URI
-import java.util.UUID
 
 import scala.collection.JavaConverters._
 
@@ -97,23 +97,33 @@ class SparkCarbonFileFormat extends FileFormat
     if (options.get(CarbonCommonConstants.SORT_COLUMNS).isDefined) {
       throw new UnsupportedOperationException("Cannot use sort columns during infer schema")
     }
-    val tableInfo = SchemaReader.inferSchema(AbsoluteTableIdentifier.from(tablePath, "", ""),
-      false, conf)
-    val table = CarbonTable.buildFromTableInfo(tableInfo)
-    var schema = new StructType
-    val fields = tableInfo.getFactTable.getListOfColumns.asScala.map { col =>
-      // TODO find better way to know its a child
-      if (!col.isComplexColumn) {
-        Some((col.getSchemaOrdinal,
-          StructField(col.getColumnName,
-            SparkTypeConverter.convertCarbonToSparkDataType(col, table))))
-      } else {
-        None
-      }
-    }.filter(_.nonEmpty).map(_.get)
-    // Maintain the schema order.
-    fields.sortBy(_._1).foreach(f => schema = schema.add(f._2))
-    Some(schema)
+    try {
+      val tableInfo = SchemaReader.inferSchema(AbsoluteTableIdentifier.from(tablePath, "", ""),
+        false, conf)
+      val table = CarbonTable.buildFromTableInfo(tableInfo)
+      var schema = new StructType
+      val fields = tableInfo.getFactTable.getListOfColumns.asScala.map { col =>
+        // TODO find better way to know its a child
+        if (!col.isComplexColumn) {
+          Some((col.getSchemaOrdinal,
+            StructField(col.getColumnName,
+              SparkTypeConverter.convertCarbonToSparkDataType(col, table))))
+        } else {
+          None
+        }
+      }.filter(_.nonEmpty).map(_.get)
+      // Maintain the schema order.
+      fields.sortBy(_._1).foreach(f => schema = schema.add(f._2))
+      Some(schema)
+    } catch {
+      case e: IOException =>
+        if (e.getMessage.contains("file is not present")) {
+          Some(StructType(Seq(StructField("empty", StringType))))
+        } else {
+          throw e
+        }
+      case e => throw e
+    }
   }
 
   /**
@@ -153,12 +163,15 @@ class SparkCarbonFileFormat extends FileFormat
         } else {
           path
         }
+        FileFactory.mkdirs(updatedPath, context.getConfiguration)
         context.getConfiguration.set("carbon.outputformat.writepath", updatedPath)
         // "jobid"+"x"+"taskid", task retry should have same task number
         context.getConfiguration.set("carbon.outputformat.taskno",
           context.getTaskAttemptID.getJobID.getJtIdentifier +
           context.getTaskAttemptID.getJobID.getId
           + 'x' + context.getTaskAttemptID.getTaskID.getId)
+        CarbonProperties.getInstance().addProperty(CarbonLoadOptionConstants
+          .ENABLE_CARBON_LOAD_DIRECT_WRITE_TO_STORE_PATH, "false")
         new CarbonOutputWriter(path, context, dataSchema.fields)
       }
 

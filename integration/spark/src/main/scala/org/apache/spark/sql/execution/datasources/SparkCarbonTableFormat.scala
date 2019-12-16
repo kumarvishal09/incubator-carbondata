@@ -38,6 +38,9 @@ import org.apache.spark.sql.catalyst.catalog.ExternalCatalogUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.DataSourceRegister
 import org.apache.spark.sql.types._
+import org.apache.spark.TaskContext
+import org.apache.spark.sql.carbondata.execution.datasources.tasklisteners.CarbonLoadTaskCompletionListenerImpl
+import org.apache.spark.sql.execution.command.management.CommonLoadUtils
 
 import org.apache.carbondata.common.Maps
 import org.apache.carbondata.core.constants.{CarbonCommonConstants, CarbonLoadOptionConstants}
@@ -153,6 +156,10 @@ with Serializable {
     val staticPartition = options.getOrElse("staticpartition", null)
     if (staticPartition != null) {
       conf.set("carbon.staticpartition", staticPartition)
+    }
+    val transactionId = options.getOrElse("transactionId", null)
+    if(null != transactionId) {
+      conf.set("carbon.transactionId", transactionId)
     }
     // In case of update query there is chance to remove the older segments, so here we can set
     // the to be deleted segments to mark as delete while updating tablestatus
@@ -529,6 +536,10 @@ private class CarbonOutputWriter(path: String,
         new Path(tmpPath)
       }
     }.getRecordWriter(context).asInstanceOf[CarbonRecordWriter]
+  }
+
+  Option(TaskContext.get()).foreach {c =>
+    c.addTaskCompletionListener(CarbonLoadTaskCompletionListenerImpl(recordWriter, context))
   }
 
   // TODO Implement write support interface to support writing Row directly to record writer

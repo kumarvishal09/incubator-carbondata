@@ -36,6 +36,7 @@ import org.apache.spark.sql.execution.command.stream.{CarbonCreateStreamCommand,
 import org.apache.spark.sql.execution.command.table.CarbonCreateTableCommand
 import org.apache.spark.sql.execution.command.view.{CarbonCreateMVCommand, CarbonDropMVCommand, CarbonRefreshMVCommand, CarbonShowMVCommand}
 import org.apache.spark.sql.secondaryindex.command.{CarbonCreateSecondaryIndexCommand, _}
+import org.apache.spark.sql.execution.command.transaction.{CarbonGetCurrentTransactionSegmentCommand, CommitTransactionCommand, UnRegisterTransactionTableCommand, RollbackTransactionCommand, StartTransactionCommand}
 import org.apache.spark.sql.types.StructField
 import org.apache.spark.sql.util.CarbonException
 import org.apache.spark.util.CarbonReflectionUtils
@@ -77,7 +78,7 @@ class CarbonSpark2SqlParser extends CarbonDDLSqlParser {
 
   protected lazy val segmentManagement: Parser[LogicalPlan] =
     deleteSegmentByID | deleteSegmentByLoadDate | deleteStage | cleanFiles | addSegment |
-    showSegments
+    showSegments | getCurrentTransactionSegment
 
   protected lazy val restructure: Parser[LogicalPlan] = alterTableDropColumn
 
@@ -96,7 +97,8 @@ class CarbonSpark2SqlParser extends CarbonDDLSqlParser {
 
   protected lazy val indexCommands: Parser[LogicalPlan] =
     createIndex | dropIndex | showIndexes | registerIndexes | refreshIndex | repairIndex |
-      repairIndexDatabase
+      repairIndexDatabase | startTransaction |
+    commitTransaction | rollBackTransaction | registerTransactionTable
 
   protected lazy val alterTable: Parser[LogicalPlan] =
     ALTER ~> TABLE ~> (ident <~ ".").? ~ ident ~ (COMPACT ~ stringLit) ~
@@ -486,6 +488,12 @@ class CarbonSpark2SqlParser extends CarbonDDLSqlParser {
               options.getOrElse(List[(String, String)]()).toMap[String, String])
     }
 
+  protected lazy val registerTransactionTable: Parser[LogicalPlan] =
+    UNREGISTER ~> TRANSACTION ~> TABLE ~> stringLit <~ opt(";") ^^ {
+      case tablename =>
+        UnRegisterTransactionTableCommand(tablename)
+    }
+
   /**
    * ALTER TABLE [dbName.]tableName ADD SEGMENT
    * OPTIONS('path'='path','format'='format', ['partition'='schema list'])
@@ -556,6 +564,30 @@ class CarbonSpark2SqlParser extends CarbonDDLSqlParser {
             showHistory.isDefined,
             withStage.isDefined)
         }
+    }
+
+  protected lazy val startTransaction: Parser[LogicalPlan] =
+    START ~> TRANSACTION ^^ {
+      case _ =>
+        StartTransactionCommand()
+    }
+
+  protected lazy val commitTransaction: Parser[LogicalPlan] =
+    COMMIT ~> TRANSACTION ^^ {
+      case _ =>
+        CommitTransactionCommand()
+    }
+
+  protected lazy val rollBackTransaction: Parser[LogicalPlan] =
+    ROLLBACK ~> TRANSACTION ^^ {
+      case _ =>
+        RollbackTransactionCommand()
+    }
+
+  protected lazy val getCurrentTransactionSegment: Parser[LogicalPlan] =
+    GET ~> CURRENT ~> TRANSACTION ~> SEGMENT ~> FOR ~> TABLE ~> stringLit <~ opt(";") ^^ {
+      case tableName =>
+        CarbonGetCurrentTransactionSegmentCommand(tableName)
     }
 
   protected lazy val showCache: Parser[LogicalPlan] =

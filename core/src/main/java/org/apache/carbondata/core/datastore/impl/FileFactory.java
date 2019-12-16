@@ -328,6 +328,14 @@ public final class FileFactory {
     return path.delete();
   }
 
+  public static boolean deleteAllCarbonFilesOfDirNonRecursive(CarbonFile path) {
+    CarbonFile[] files = path.listFiles();
+    for (int i = 0; i < files.length; i++) {
+      files[i].delete();
+    }
+    return path.delete();
+  }
+
   public static boolean mkdirs(String filePath) throws IOException {
     return getCarbonFile(filePath).mkdirs();
   }

@@ -34,7 +34,10 @@ import org.apache.spark.sql.execution.datasources.{CarbonSQLHadoopMapReduceCommi
 import org.apache.spark.sql.internal.SQLConf.PartitionOverwriteMode
 import org.apache.spark.sql.util.SchemaUtils
 
+import org.apache.carbondata.core.transaction.{TransactionActionType, TransactionManager}
 import org.apache.carbondata.spark.util.CarbonScalaUtil
+import org.apache.carbondata.tranaction.SessionTransactionManager
+import org.apache.carbondata.transaction.AddPartitionTransactionAction
 
 /**
  * A command for writing data to a
@@ -130,29 +133,6 @@ case class CarbonInsertIntoHadoopFsRelationCommand(
 
     if (doInsertion) {
 
-      def refreshUpdatedPartitions(updatedPartitionPaths: Set[String]): Unit = {
-        val updatedPartitions = updatedPartitionPaths.map(PartitioningUtils.parsePathFragment)
-        if (partitionsTrackedByCatalog) {
-          val newPartitions = updatedPartitions -- initialMatchingPartitions
-          if (newPartitions.nonEmpty) {
-            AlterTableAddPartitionCommand(
-              catalogTable.get.identifier, newPartitions.toSeq.map(p => (p, None)),
-              ifNotExists = true).run(sparkSession)
-          }
-          // For dynamic partition overwrite, we never remove partitions but only
-          // update existing ones.
-          if (mode == SaveMode.Overwrite && !dynamicPartitionOverwrite) {
-            val deletedPartitions = initialMatchingPartitions.toSet -- updatedPartitions
-            if (deletedPartitions.nonEmpty) {
-              AlterTableDropPartitionCommand(
-                catalogTable.get.identifier, deletedPartitions.toSeq,
-                ifExists = true, purge = false,
-                retainData = true /* already deleted */).run(sparkSession)
-            }
-          }
-        }
-      }
-
       val updatedPartitionPaths =
         FileFormatWriter.write(
           sparkSession = sparkSession,
@@ -167,44 +147,33 @@ case class CarbonInsertIntoHadoopFsRelationCommand(
           statsTrackers = Seq(basicWriteJobStatsTracker(hadoopConf)),
           options = options)
 
-      val mappedParts = new mutable.LinkedHashMap[String, String]
-
-      val update = updatedPartitionPaths.map {
-        eachPath =>
-          mappedParts.clear()
-          val partitionFolders = eachPath.split("/")
-          partitionFolders.map {
-            folder =>
-              val part = folder.split("=")
-              mappedParts.put(part(0), part(1))
-          }
-          val convertedUpdatedPartitionPaths = CarbonScalaUtil.updatePartitions(
-            mappedParts,
-            CarbonEnv.getCarbonTable(catalogTable.get.identifier)(sparkSession)
-          )
-
-          val cols = partitionColumns
-            .map(col => {
-              val c = new mutable.StringBuilder()
-              c.append(col.name).append("=")
-                .append(convertedUpdatedPartitionPaths.get(col.name).get)
-                .toString()
-            })
-          cols.toList.mkString("/")
+      val addPartitionTransactionAction = new AddPartitionTransactionAction(
+        sparkSession,
+        catalogTable,
+        mode,
+        dynamicPartitionOverwrite,
+        partitionsTrackedByCatalog,
+        initialMatchingPartitions,
+        updatedPartitionPaths,
+        partitionColumns,
+        fileIndex,
+        outputPath)
+      val transactionId = if (catalogTable.isDefined) {
+        TransactionManager.getInstance()
+          .getTransactionManager
+          .asInstanceOf[SessionTransactionManager]
+          .getTransactionId(sparkSession, catalogTable.get.qualifiedName.toString)
+      } else {
+        null
       }
-
-      // update metastore partition metadata
-      refreshUpdatedPartitions(update)
-
-      // refresh cached files in FileIndex
-      fileIndex.foreach(_.refresh())
-      // refresh data cache if table is cached
-      sparkSession.catalog.refreshByPath(outputPath.toString)
-
-      if (catalogTable.nonEmpty) {
-        CommandUtils.updateTableStats(sparkSession, catalogTable.get)
+      if (null == transactionId) {
+        addPartitionTransactionAction.commit()
+      } else {
+        TransactionManager.getInstance()
+          .recordTransactionAction(transactionId,
+            addPartitionTransactionAction,
+            TransactionActionType.COMMIT_SCOPE)
       }
-
     } else {
       logInfo("Skipping insertion into a relation that already exists.")
     }

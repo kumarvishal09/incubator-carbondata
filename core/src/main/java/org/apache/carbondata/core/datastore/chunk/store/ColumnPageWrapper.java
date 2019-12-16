@@ -112,8 +112,9 @@ public class ColumnPageWrapper implements DimensionColumnPage {
     DataType srcDataType = columnPage.getColumnSpec().getSchemaDataType();
     DataType targetDataType = columnPage.getDataType();
     if (null != localDictionary) {
-      return localDictionary
-          .getDictionaryValue(CarbonUtil.getSurrogateInternal(columnPage.getBytes(rowId), 0, 3));
+      return localDictionary.getDictionaryValue(CarbonUtil
+          .getSurrogateInternal(columnPage.getBytes(rowId), 0,
+              CarbonCommonConstants.LOCAL_DICT_ENCODED_BYTEARRAY_SIZE));
     } else if ((columnType == ColumnType.COMPLEX_PRIMITIVE && isAdaptiveEncoded()) || (
         columnType == ColumnType.PLAIN_VALUE && DataTypeUtil.isPrimitiveColumn(srcDataType))) {
       if (srcDataType == DataTypes.FLOAT) {

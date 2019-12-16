@@ -17,13 +17,18 @@
 
 package org.apache.carbondata.core.datastore.filesystem;
 
+import java.io.DataInputStream;
+import java.io.DataOutputStream;
 import java.io.IOException;
 
 import org.apache.carbondata.common.logging.LogServiceFactory;
+import org.apache.carbondata.core.constants.CarbonCommonConstants;
+import org.apache.carbondata.core.datastore.impl.FileFactory;
+import org.apache.carbondata.core.util.CarbonUtil;
 
+import org.apache.hadoop.fs.FSDataOutputStream;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.Path;
-import org.apache.hadoop.hdfs.DistributedFileSystem;
 import org.apache.log4j.Logger;
 
 public class AlluxioCarbonFile extends HDFSCarbonFile {
@@ -71,14 +76,44 @@ public class AlluxioCarbonFile extends HDFSCarbonFile {
   }
 
   @Override
+  public DataOutputStream getDataOutputStreamUsingAppend()
+      throws IOException {
+    return getDataOutputStream(CarbonCommonConstants.BYTEBUFFER_SIZE, true);
+  }
+
+  @Override
+  public DataOutputStream getDataOutputStream(int bufferSize, boolean append) throws
+      IOException {
+    FSDataOutputStream stream;
+    if (append) {
+      // append to a file only if file already exists else file not found
+      // exception will be thrown by hdfs
+      if (CarbonUtil.isFileExists(getFormattedPath(path.toString()))) {
+        DataInputStream dataInputStream = fileSystem.open(path);
+        int count = dataInputStream.available();
+        // create buffer
+        byte[] byteStreamBuffer = new byte[count];
+        int bytesRead = dataInputStream.read(byteStreamBuffer);
+        dataInputStream.close();
+        stream = fileSystem.create(path, true, bufferSize);
+        stream.write(byteStreamBuffer, 0, bytesRead);
+      } else {
+        stream = fileSystem.create(path, true, bufferSize);
+      }
+    } else {
+      stream = fileSystem.create(path, true, bufferSize);
+    }
+    return stream;
+  }
+
+  @Override
   public boolean renameForce(String changeToName) {
     try {
-      if (fileSystem instanceof DistributedFileSystem) {
-        ((DistributedFileSystem) fileSystem).rename(path, new Path(changeToName),
-            org.apache.hadoop.fs.Options.Rename.OVERWRITE);
-        return true;
-      }
-      return false;
+      // check if any file with the new name exists and delete it.
+      CarbonFile newCarbonFile = FileFactory.getCarbonFile(changetoName);
+      newCarbonFile.delete();
+      // rename the old file to the new name.
+      return fileSystem.rename(path, new Path(changetoName));
     } catch (IOException e) {
       LOGGER.error("Exception occurred: " + e.getMessage(), e);
       return false;

@@ -1,0 +1,10 @@
+<Configuration>
+  <property>
+    <name>hbase.rootdir</name>
+    <value>hdfs://localhost:8020/hbase</value>
+  </property>
+  <property>
+    <name>hbase.cluster.distributed</name>
+    <value>true</value>
+  </property>
+</Configuration>

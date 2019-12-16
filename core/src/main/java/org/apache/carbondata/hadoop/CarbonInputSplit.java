@@ -105,7 +105,7 @@ public class CarbonInputSplit extends FileSplit
 
   private long start;
 
-  private long length;
+  public long length;
 
   private String[] location;
 

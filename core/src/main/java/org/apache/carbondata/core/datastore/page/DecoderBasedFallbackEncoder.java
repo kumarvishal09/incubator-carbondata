@@ -112,7 +112,7 @@ public class DecoderBasedFallbackEncoder implements Callable<FallbackEncodedColu
     // get the actual data for each dictionary data and put the actual data in new page
     int rowId = 0;
     for (int i = 0; i < pageSize; i++) {
-      int index = reverseInvertedIndex[i] * 3;
+      int index = reverseInvertedIndex[i] * 2;
       int keyArray = (int) keyGenerator.getKeyArray(bytes, index)[0];
       if (actualDataColumnPage instanceof LVByteBufferColumnPage) {
         //TODO It's a quick fix, we can fallback to old logic adding Length outside of

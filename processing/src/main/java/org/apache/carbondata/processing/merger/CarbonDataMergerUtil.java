@@ -199,8 +199,15 @@ public final class CarbonDataMergerUtil {
         }
 
         // create entry for merged one.
+        SegmentStatus status = SegmentStatus.SUCCESS;
+        if (!carbonLoadModel.getCarbonDataLoadSchema().getCarbonTable().isHivePartitionTable()
+            && carbonLoadModel.getCarbonDataLoadSchema().getCarbonTable().isTransactionalTable()
+            && !carbonLoadModel.getCarbonDataLoadSchema().getCarbonTable().isChildTableForMV()
+            && !CarbonLoaderUtil.isValidSegment(carbonLoadModel, mergedLoadNumber)) {
+          status = SegmentStatus.MARKED_FOR_DELETE;
+        }
         LoadMetadataDetails loadMetadataDetails = new LoadMetadataDetails();
-        loadMetadataDetails.setSegmentStatus(SegmentStatus.SUCCESS);
+        loadMetadataDetails.setSegmentStatus(status);
         long loadEnddate = CarbonUpdateUtil.readCurrentTime();
         loadMetadataDetails.setLoadEndTime(loadEnddate);
         CarbonTable carbonTable = carbonLoadModel.getCarbonDataLoadSchema().getCarbonTable();

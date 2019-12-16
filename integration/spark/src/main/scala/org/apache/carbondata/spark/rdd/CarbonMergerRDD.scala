@@ -230,9 +230,8 @@ class CarbonMergerRDD[K, V](
         if (carbonTable.getSortScope == SortScopeOptions.SortScope.NO_SORT ||
           rawResultIteratorMap.get(CarbonCompactionUtil.UNSORTED_IDX).size() == 0) {
 
-          LOGGER.info("RowResultMergerProcessor flow is selected")
-          processor = new RowResultMergerProcessor(
-            databaseName,
+          LOGGER.info("NoSortMergerProcessor flow is selected")
+          processor = new NoSortMergerProcessor(
             factTableName,
             segmentProperties,
             tempStoreLoc,

@@ -104,6 +104,7 @@ class StringVectorFiller extends AbstractNonDictionaryVectorFiller {
         localOffset += length;
       }
     } else {
+      vector.putAllByteArray(data, 0, actualDataLength);
       for (int i = 0; i < numberOfRows; i++) {
         int length = (((data[localOffset] & 0xFF) << 8) | (data[localOffset + 1] & 0xFF));
         localOffset += 2;
@@ -115,7 +116,6 @@ class StringVectorFiller extends AbstractNonDictionaryVectorFiller {
         }
         localOffset += length;
       }
-      vector.putAllByteArray(data, 0, actualDataLength);
     }
   }
 }

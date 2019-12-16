@@ -190,6 +190,15 @@ public class ColumnSchema implements Serializable, Writable, Cloneable {
     return isDimensionColumn;
   }
 
+  public ColumnSchema(String columnName, DataType dataType, int schemaOrdinal) {
+    this.dataType = dataType;
+    this.columnName = columnName;
+    this.schemaOrdinal = schemaOrdinal;
+  }
+
+  public ColumnSchema() {
+  }
+
   /**
    * @param isDimensionColumn the isDimensionColumn to set
    */

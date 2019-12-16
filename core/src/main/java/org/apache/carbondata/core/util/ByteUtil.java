@@ -584,9 +584,9 @@ public final class ByteUtil {
     if (CarbonUnsafe.getUnsafe() != null) {
       if (CarbonUnsafe.IS_LITTLE_ENDIAN) {
         l = Long.reverseBytes(
-            CarbonUnsafe.getUnsafe().getLong(bytes, offset + CarbonUnsafe.BYTE_ARRAY_OFFSET));
+            CarbonUnsafe.getUnsafe().getLong(bytes, (long)(offset + CarbonUnsafe.BYTE_ARRAY_OFFSET)));
       } else {
-        l = CarbonUnsafe.getUnsafe().getLong(bytes, offset + CarbonUnsafe.BYTE_ARRAY_OFFSET);
+        l = CarbonUnsafe.getUnsafe().getLong(bytes, (long)(offset + CarbonUnsafe.BYTE_ARRAY_OFFSET));
       }
     } else {
       for (int i = offset; i < offset + length; i++) {

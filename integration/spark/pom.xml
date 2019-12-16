@@ -120,6 +120,17 @@
     </dependency>
     <dependency>
       <groupId>org.apache.carbondata</groupId>
+      <artifactId>carbondata-sdk</artifactId>
+      <version>${project.version}</version>
+      <exclusions>
+        <exclusion>
+          <groupId>com.fasterxml.jackson.core</groupId>
+          <artifactId>*</artifactId>
+        </exclusion>
+      </exclusions>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.carbondata</groupId>
       <artifactId>carbondata-lucene</artifactId>
       <version>${project.version}</version>
       <exclusions>
@@ -176,7 +187,7 @@
     <!-- spark -->
     <dependency>
       <groupId>org.apache.spark</groupId>
-      <artifactId>spark-hive-thriftserver_${scala.binary.version}</artifactId>
+      <artifactId>spark-hive_${scala.binary.version}</artifactId>
       <exclusions>
         <exclusion>
           <groupId>com.twitter</groupId>

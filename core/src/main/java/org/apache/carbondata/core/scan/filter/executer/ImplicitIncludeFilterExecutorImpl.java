@@ -73,6 +73,11 @@ public class ImplicitIncludeFilterExecutorImpl
   }
 
   @Override
+  public BitSet isScanRequired(MinMaxPruneMetadata minMaxPruneMetadata) {
+    return null;
+  }
+
+  @Override
   public void readColumnChunks(RawBlockletColumnChunks rawBlockletColumnChunks) {
 
   }

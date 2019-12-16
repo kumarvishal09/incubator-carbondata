@@ -260,8 +260,8 @@ public class RangeValueFilterExecutorImpl implements FilterExecutor {
    * @param filterValues
    * @return
    */
-  public boolean isScanRequired(byte[] blockMinValue, byte[] blockMaxValue, byte[][] filterValues,
-      boolean isMinMaxSet) {
+  private boolean isScanRequired(byte[] blockMinValue, byte[] blockMaxValue, byte[][] filterValues,
+      boolean isMinMaxSet, boolean useMaxValidation) {
     if (!isMinMaxSet) {
       // scan complete data if min max is not written for a given column
       return true;
@@ -308,10 +308,11 @@ public class RangeValueFilterExecutorImpl implements FilterExecutor {
           FilterUtil.compareValues(filterValues[1], blockMinValue, carbonDimension, true) >= 0))
           || ((lessThanEqualExp) && (
           FilterUtil.compareValues(filterValues[1], blockMinValue, carbonDimension, true) > 0)) || (
-          (greaterThanExp) && (
+          useMaxValidation || ((greaterThanExp) && (
               FilterUtil.compareValues(filterValues[0], blockMaxValue, carbonDimension, false)
                   >= 0)) || ((greaterThanEqualExp) && (
-          FilterUtil.compareValues(filterValues[0], blockMaxValue, carbonDimension, false) > 0))) {
+              FilterUtil.compareValues(filterValues[0], blockMaxValue, carbonDimension, false)
+                  > 0)))) {
         // completely out of block boundary
         isScanRequired = false;
       } else {
@@ -323,11 +324,11 @@ public class RangeValueFilterExecutorImpl implements FilterExecutor {
           startBlockMinIsDefaultStart = true;
         }
 
-        if (((lessThanExp) && (
+        if (useMaxValidation || ((((lessThanExp) && (
             FilterUtil.compareValues(filterValues[1], blockMaxValue, carbonDimension, false) > 0))
             || ((lessThanEqualExp) && (
             FilterUtil.compareValues(filterValues[1], blockMaxValue, carbonDimension, false)
-                >= 0))) {
+                >= 0))))) {
           endBlockMaxisDefaultEnd = true;
         }
 
@@ -342,6 +343,40 @@ public class RangeValueFilterExecutorImpl implements FilterExecutor {
   }
 
   /**
+   * Method to identify if scanning of Data Block required or not by comparing the Block Min and Max
+   * values and comparing them with filter min and max value.
+   * @param blockMinValue
+   * @param blockMaxValue
+   * @param filterValues
+   * @return
+   */
+  public boolean isScanRequired(byte[] blockMinValue, byte[] blockMaxValue, byte[][] filterValues,
+      boolean isMinMaxSet) {
+    return isScanRequired(blockMinValue, blockMaxValue, filterValues, isMinMaxSet, true);
+  }
+
+  @Override
+  public BitSet isScanRequired(MinMaxPruneMetadata minMaxPruneMetadata) {
+    return isScanRequired(minMaxPruneMetadata.getBlockMaxValue(),
+        minMaxPruneMetadata.getBlockMinValue(), minMaxPruneMetadata.getIsMinMaxSet(),
+        minMaxPruneMetadata.isMaxValidationRequired());
+  }
+
+  private BitSet isScanRequired(byte[][] blockMaxValue, byte[][] blockMinValue,
+      boolean[] isMinMaxSet, boolean useMaxValidation) {
+    BitSet bitSet = new BitSet(1);
+    byte[][] filterValues = this.filterRangesValues;
+    int columnIndex = this.dimColEvaluatorInfo.getColumnIndexInMinMaxByteArray();
+    boolean isScanRequired =
+        columnIndex >= blockMinValue.length || isScanRequired(blockMinValue[columnIndex],
+            blockMaxValue[columnIndex], filterValues, isMinMaxSet[columnIndex], useMaxValidation);
+    if (isScanRequired) {
+      bitSet.set(0);
+    }
+    return bitSet;
+  }
+
+  /**
    * Method checks is the scan lies within the range values or not.
    * @param blockMaxValue
    * @param blockMinValue
@@ -350,16 +385,7 @@ public class RangeValueFilterExecutorImpl implements FilterExecutor {
   @Override
   public BitSet isScanRequired(byte[][] blockMaxValue, byte[][] blockMinValue,
       boolean[] isMinMaxSet) {
-    BitSet bitSet = new BitSet(1);
-    byte[][] filterValues = this.filterRangesValues;
-    int columnIndex = this.dimColEvaluatorInfo.getColumnIndexInMinMaxByteArray();
-    boolean isScanRequired =
-        columnIndex >= blockMinValue.length || isScanRequired(blockMinValue[columnIndex],
-            blockMaxValue[columnIndex], filterValues, isMinMaxSet[columnIndex]);
-    if (isScanRequired) {
-      bitSet.set(0);
-    }
-    return bitSet;
+    return isScanRequired(blockMaxValue, blockMinValue, isMinMaxSet, true);
   }
 
   /**

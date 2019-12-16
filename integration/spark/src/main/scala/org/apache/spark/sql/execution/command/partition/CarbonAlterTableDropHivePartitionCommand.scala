@@ -170,15 +170,15 @@ case class CarbonAlterTableDropHivePartitionCommand(
       withEvents(operationContext,
         AlterTableDropPartitionPreStatusEvent(table, sparkSession),
         AlterTableDropPartitionPostStatusEvent(table)) {
-        SegmentFileStore.commitDropPartitions(table, uniqueId, tobeUpdatedSegs, tobeDeletedSegs,
-          uuid)
+//        SegmentFileStore.commitDropPartitions(table, uniqueId, tobeUpdatedSegs, tobeDeletedSegs,
+//          uuid)
       }
       IndexStoreManager.getInstance().clearIndex(table.getAbsoluteTableIdentifier)
       tobeCleanSegs.addAll(tobeUpdatedSegs)
       tobeCleanSegs.addAll(tobeDeletedSegs)
     } finally {
       AlterTableUtil.releaseLocks(locks)
-      SegmentFileStore.cleanSegments(table, tobeCleanSegs, null, true)
+//      SegmentFileStore.cleanSegments(table, tobeCleanSegs, null, true)
     }
     Seq.empty[Row]
   }

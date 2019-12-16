@@ -20,6 +20,7 @@ import java.util
 
 import scala.collection.JavaConverters._
 
+import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.{AnalysisException, Column, Dataset, Row, SparkSession}
 import org.apache.spark.sql.functions.expr
 
@@ -35,6 +36,10 @@ class MergeDataSetBuilder(existingDsOri: Dataset[Row], currDs: Dataset[Row],
   }
 
   val matchList: util.List[MergeMatch] = new util.ArrayList[MergeMatch]()
+
+  var partitionInfo: Map[String, Option[String]] = Map.empty
+
+  var isOverwrite: Boolean = false
 
   def whenMatched(): MergeDataSetBuilder = {
     matchList.add(WhenMatched())
@@ -93,16 +98,32 @@ class MergeDataSetBuilder(existingDsOri: Dataset[Row], currDs: Dataset[Row],
     this
   }
 
+  def insertHistoryExpr(expression: Map[Any, Any], identifier: TableIdentifier): MergeDataSetBuilder = {
+    checkBuilder
+    matchList.get(matchList.size() - 1).addAction(InsertInHistoryTableAction(convertMap(expression), identifier))
+    this
+  }
+
   def delete(): MergeDataSetBuilder = {
     checkBuilder
     matchList.get(matchList.size() - 1).addAction(DeleteAction())
     this
   }
 
+  def overwrite(): MergeDataSetBuilder = {
+    this.isOverwrite = true
+    this
+  }
+
+  def partition(partitionInfo: Map[String, Option[String]]) : MergeDataSetBuilder = {
+    this.partitionInfo = partitionInfo
+    this
+  }
+
   def build(): CarbonMergeDataSetCommand = {
     checkBuilder
     CarbonMergeDataSetCommand(existingDsOri, currDs,
-      MergeDataSetMatches(joinExpr, matchList.asScala.toList))
+      MergeDataSetMatches(joinExpr, matchList.asScala.toList), partitionInfo, isOverwrite)
   }
 
   def execute(): Unit = {

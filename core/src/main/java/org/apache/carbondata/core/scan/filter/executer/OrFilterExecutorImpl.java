@@ -71,6 +71,14 @@ public class OrFilterExecutorImpl implements FilterExecutor {
   }
 
   @Override
+  public BitSet isScanRequired(MinMaxPruneMetadata minMaxPruneMetadata) {
+    BitSet leftFilters = leftExecuter.isScanRequired(minMaxPruneMetadata);
+    BitSet rightFilters = rightExecuter.isScanRequired(minMaxPruneMetadata);
+    leftFilters.or(rightFilters);
+    return leftFilters;
+  }
+
+  @Override
   public void readColumnChunks(RawBlockletColumnChunks rawBlockletColumnChunks) throws IOException {
     leftExecutor.readColumnChunks(rawBlockletColumnChunks);
     rightExecutor.readColumnChunks(rawBlockletColumnChunks);

@@ -17,12 +17,16 @@
 
 package org.apache.spark.sql.hive
 
+import java.util.Locale
+
 import scala.collection.JavaConverters._
 
 import org.apache.spark.SPARK_VERSION
 import org.apache.spark.sql._
 import org.apache.spark.sql.CarbonExpressions.CarbonUnresolvedRelation
+import org.apache.spark.sql.carbondata.execution.datasources.SparkCarbonFileFormat
 import org.apache.spark.sql.catalyst.analysis.{UnresolvedAlias, UnresolvedAttribute, UnresolvedFunction, UnresolvedRelation, UnresolvedStar}
+import org.apache.spark.sql.catalyst.catalog.HiveTableRelation
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, Cast, NamedExpression}
 import org.apache.spark.sql.catalyst.plans.Inner
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -306,5 +310,52 @@ case class CarbonPreInsertionCasts(sparkSession: SparkSession) extends Rule[Logi
         "Cannot insert into target table because number of columns mismatch")
     }
   }
+}
+
+case class CarbonRelationConversions(sparkSession: SparkSession) extends Rule[LogicalPlan] {
+
+  private def isConvertible(relation: HiveTableRelation): Boolean = {
+    val serde = relation.tableMeta.storage.serde.getOrElse("").toLowerCase(Locale.ROOT)
+    serde.contains("carbon")
+  }
+
+  def apply(plan: LogicalPlan): LogicalPlan = {
+    plan.transform {
+      // Write path
+      case InsertIntoTable(r: HiveTableRelation, partition, query, overwrite, ifPartitionNotExists)
+        // Inserting into partitioned table is not supported in Parquet/Orc data source (yet).
+        if query.resolved && DDLUtils.isHiveTable(r.tableMeta) && isConvertible(r) =>
+        InsertIntoTable(convert(r, sparkSession), partition, query, overwrite, ifPartitionNotExists)
+
+      // Read path
+      case relation: HiveTableRelation
+        if DDLUtils.isHiveTable(relation.tableMeta) && isConvertible(relation) =>
+        convert(relation, sparkSession)
+    }
+  }
+
+  def convert(relation: HiveTableRelation, sparkSession: SparkSession): LeafNode = {
+    val options = relation.tableMeta.properties ++ relation.tableMeta.storage.properties
+    if (relation.tableMeta.storage.properties.getOrElse("isTransactional", "false").toBoolean) {
+      LogicalRelation(CarbonDatasourceHadoopRelation(sparkSession,
+        Array(FileFactory.getUpdatedFilePath(relation.tableMeta.location.toString)),
+        options ++
+        Seq(("dbname",
+          CarbonEnv.getDatabaseName(relation.tableMeta.identifier.database)(sparkSession)),
+          ("tablename", relation.tableMeta.identifier.table)).toMap,
+        Some(relation.tableMeta.schema),
+        Some(relation.tableMeta.partitionSchema)),
+        relation.tableMeta)
+    } else {
+      sparkSession.sessionState.catalog.asInstanceOf[HiveSessionCatalog]
+        .metastoreCatalog.convertToLogicalRelation(
+        relation,
+        options,
+        classOf[SparkCarbonFileFormat],
+        "carbon")
+    }
+  }
+
+
 }
 

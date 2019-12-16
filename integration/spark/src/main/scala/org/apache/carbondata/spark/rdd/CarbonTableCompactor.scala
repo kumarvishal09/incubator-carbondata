@@ -84,6 +84,15 @@ class CarbonTableCompactor(
     }
   }
 
+  private def isCompactWithInSegment(loadsToMerge: java.util.List[LoadMetadataDetails]): Boolean = {
+    if (CompactionType.CUSTOM == compactionModel.compactionType &&
+        loadsToMerge.size() == 1 && compactionModel.compactWithInSegment) {
+      true
+    } else {
+      false
+    }
+  }
+
   override def executeCompaction(): Unit = {
     val sortedSegments: util.List[LoadMetadataDetails] = new util.ArrayList[LoadMetadataDetails](
       carbonLoadModel.getLoadMetadataDetails.asScala.filter(_.isCarbonFormat).asJava
@@ -92,7 +101,7 @@ class CarbonTableCompactor(
 
     var loadsToMerge = identifySegmentsToBeMerged()
 
-    while (loadsToMerge.size() > 1 || needSortSingleSegment(loadsToMerge)) {
+    while (loadsToMerge.size() > 1 || isCompactWithInSegment(loadsToMerge) || needSortSingleSegment(loadsToMerge)) {
       val lastSegment = sortedSegments.get(sortedSegments.size() - 1)
       val compactedLoad = CarbonDataMergerUtil.getMergedLoadName(loadsToMerge)
       var segmentLocks: ListBuffer[ICarbonLock] = ListBuffer.empty
@@ -185,7 +194,8 @@ class CarbonTableCompactor(
       sqlContext,
       compactionModel.compactionType,
       compactionModel.currentPartitions,
-      compactedSegments)
+      compactedSegments,
+      compactionModel.compactWithInSegment))
     try {
       triggerCompaction(compactionCallableModel, mergedLoadName: String)
     } catch {
@@ -211,6 +221,7 @@ class CarbonTableCompactor(
     val tablePath = carbonLoadModel.getTablePath
     val startTime = System.nanoTime()
     val mergedLoads = compactionCallableModel.compactedSegments
+    val compactWithInSegment = compactionCallableModel. compactWithInSegment
     mergedLoads.add(mergedLoadName)
     var finalMergeStatus = false
     val databaseName: String = carbonLoadModel.getDatabaseName
@@ -289,6 +300,12 @@ class CarbonTableCompactor(
           carbonLoadModel,
           carbonMergerMapping,
           segmentMetaDataAccumulator)
+      } else if (CompactionType.CUSTOM == compactionType && compactWithInSegment) {
+        new CarbonSegmentMergerRDD(sc.sparkSession,
+          new MergeResultImpl(),
+          carbonLoadModel,
+          carbonMergerMapping,
+          segmentMetaDataAccumulator).collect()
       } else {
         if (mergeRDD != null) {
           val result = mergeRDD.collect

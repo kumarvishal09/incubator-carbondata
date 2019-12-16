@@ -27,7 +27,7 @@ public class SegmentMetaDataInfo implements Serializable {
 
   private Map<String, SegmentColumnMetaDataInfo> segmentColumnMetaDataInfoMap;
 
-  SegmentMetaDataInfo(Map<String, SegmentColumnMetaDataInfo> segmentColumnMetaDataInfoMap) {
+  public SegmentMetaDataInfo(Map<String, SegmentColumnMetaDataInfo> segmentColumnMetaDataInfoMap) {
     this.segmentColumnMetaDataInfoMap = segmentColumnMetaDataInfoMap;
   }
 

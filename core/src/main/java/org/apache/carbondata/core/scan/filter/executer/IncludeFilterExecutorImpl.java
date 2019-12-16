@@ -486,7 +486,19 @@ public class IncludeFilterExecutorImpl implements FilterExecutor {
   }
 
   @Override
+  public BitSet isScanRequired(MinMaxPruneMetadata minMaxPruneMetadata) {
+    return isScanRequired(minMaxPruneMetadata.getBlockMaxValue(),
+        minMaxPruneMetadata.getBlockMinValue(), minMaxPruneMetadata.getIsMinMaxSet(),
+        minMaxPruneMetadata.isMaxValidationRequired());
+  }
+
+  @Override
   public BitSet isScanRequired(byte[][] blkMaxVal, byte[][] blkMinVal, boolean[] isMinMaxSet) {
+    return isScanRequired(blkMaxVal, blkMinVal, isMinMaxSet, true);
+  }
+
+  private BitSet isScanRequired(byte[][] blkMaxVal, byte[][] blkMinVal, boolean[] isMinMaxSet,
+      boolean useMaxValidation) {
     BitSet bitSet = new BitSet(1);
     byte[][] filterValues;
     int chunkIndex = 0;
@@ -500,16 +512,17 @@ public class IncludeFilterExecutorImpl implements FilterExecutor {
       if (DataTypeUtil.isPrimitiveColumn(dimColumnEvaluatorInfo.getDimension().getDataType()) &&
           dimColumnEvaluatorInfo.getDimension().getDataType() != DataTypes.DATE) {
         isScanRequired = isScanRequired(blkMaxVal[chunkIndex], blkMinVal[chunkIndex], filterValues,
-            dimColumnEvaluatorInfo.getDimension().getDataType());
+            dimColumnEvaluatorInfo.getDimension().getDataType(), useMaxValidation);
       } else {
         isScanRequired = isScanRequired(blkMaxVal[chunkIndex], blkMinVal[chunkIndex], filterValues,
-          isMinMaxSet[chunkIndex]);
+            isMinMaxSet[chunkIndex], useMaxValidation);
       }
     } else if (isMeasurePresentInCurrentBlock) {
       chunkIndex = msrColumnEvaluatorInfo.getColumnIndexInMinMaxByteArray();
       if (isMinMaxSet[chunkIndex]) {
         isScanRequired = isScanRequired(blkMaxVal[chunkIndex], blkMinVal[chunkIndex],
-            msrColumnExecutorInfo.getFilterKeys(), msrColumnEvaluatorInfo.getType());
+            msrColumnExecutorInfo.getFilterKeys(), msrColumnEvaluatorInfo.getType(),
+            useMaxValidation);
       } else {
         isScanRequired = true;
       }
@@ -523,6 +536,11 @@ public class IncludeFilterExecutorImpl implements FilterExecutor {
 
   private boolean isScanRequired(byte[] blkMaxVal, byte[] blkMinVal, byte[][] filterValues,
       boolean isMinMaxSet) {
+    return isScanRequired(blkMaxVal, blkMinVal, filterValues, isMinMaxSet, true);
+  }
+
+  private boolean isScanRequired(byte[] blkMaxVal, byte[] blkMinVal, byte[][] filterValues,
+      boolean isMinMaxSet, boolean useMaxValidation) {
     if (!isMinMaxSet) {
       // scan complete data if min max is not written for a given column
       return true;
@@ -532,7 +550,7 @@ public class IncludeFilterExecutorImpl implements FilterExecutor {
       // filter value should be in range of max and min value i.e
       // max>filterValue>min
       // so filter-max should be negative
-      int maxCompare = ByteUtil.UnsafeComparer.INSTANCE.compareTo(filterValue, blkMaxVal);
+      int maxCompare = useMaxValidation?ByteUtil.UnsafeComparer.INSTANCE.compareTo(filterValue, blkMaxVal):0;
       // and filter-min should be positive
       int minCompare = ByteUtil.UnsafeComparer.INSTANCE.compareTo(filterValue, blkMinVal);
 
@@ -548,9 +566,14 @@ public class IncludeFilterExecutorImpl implements FilterExecutor {
 
   private boolean isScanRequired(byte[] blkMaxVal, byte[] blkMinVal, byte[][] filterValues,
       DataType dataType) {
+    return isScanRequired(blkMaxVal, blkMinVal, filterValues, dataType, true);
+  }
+
+  private boolean isScanRequired(byte[] blkMaxVal, byte[] blkMinVal, byte[][] filterValues,
+      DataType dataType, boolean useMaxValidation) {
     boolean isScanRequired = false;
     Object minValue = DataTypeUtil.getDataBasedOnDataTypeForNoDictionaryColumn(blkMinVal, dataType);
-    Object maxValue = DataTypeUtil.getDataBasedOnDataTypeForNoDictionaryColumn(blkMaxVal, dataType);
+    Object maxValue = useMaxValidation?DataTypeUtil.getDataBasedOnDataTypeForNoDictionaryColumn(blkMaxVal, dataType):0;
     for (byte[] filterValue : filterValues) {
       if (ByteUtil.UnsafeComparer.INSTANCE
           .compareTo(filterValue, CarbonCommonConstants.EMPTY_BYTE_ARRAY) == 0) {
@@ -562,7 +585,7 @@ public class IncludeFilterExecutorImpl implements FilterExecutor {
       Object data =
           DataTypeUtil.getDataBasedOnDataTypeForNoDictionaryColumn(filterValue, dataType);
       SerializableComparator comparator = Comparator.getComparator(dataType);
-      int maxCompare = comparator.compare(data, maxValue);
+      int maxCompare = useMaxValidation ? comparator.compare(data, maxValue) : 0;
       int minCompare = comparator.compare(data, minValue);
       // if any filter value is in range than this block needs to be
       // scanned
@@ -576,14 +599,20 @@ public class IncludeFilterExecutorImpl implements FilterExecutor {
 
   private boolean isScanRequired(byte[] maxValue, byte[] minValue, Object[] filterValue,
       DataType dataType) {
-    Object maxObject = DataTypeUtil.getMeasureObjectFromDataType(maxValue, dataType);
+    return isScanRequired(maxValue, minValue, filterValue, dataType, true);
+  }
+
+  private boolean isScanRequired(byte[] maxValue, byte[] minValue, Object[] filterValue,
+      DataType dataType, boolean useMaxValidation) {
+    Object maxObject =
+        useMaxValidation ? DataTypeUtil.getMeasureObjectFromDataType(maxValue, dataType) : null;
     Object minObject = DataTypeUtil.getMeasureObjectFromDataType(minValue, dataType);
     for (Object o : filterValue) {
       // TODO handle min and max for null values.
       if (o == null) {
         return true;
       }
-      if (comparator.compare(o, maxObject) <= 0 && comparator.compare(o, minObject) >= 0) {
+      if ((!useMaxValidation || comparator.compare(o, maxObject) <= 0) && comparator.compare(o, minObject) >= 0) {
         return true;
       }
     }

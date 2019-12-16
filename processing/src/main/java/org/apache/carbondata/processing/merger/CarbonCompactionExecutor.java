@@ -72,6 +72,7 @@ public class CarbonCompactionExecutor {
       new ArrayList<>(CarbonCommonConstants.DEFAULT_COLLECTION_SIZE);
   private CarbonTable carbonTable;
   private QueryModel queryModel;
+  private boolean isNoSortBasedMerger;
 
   /**
    * flag to check whether any restructured block exists in the blocks selected for compaction.
@@ -164,10 +165,10 @@ public class CarbonCompactionExecutor {
           queryModel.setTableBlockInfos(tableBlockInfoList);
           if (sortingRequired) {
             resultList.get(CarbonCompactionUtil.UNSORTED_IDX).add(
-                getRawResultIterator(configuration, segmentId, task, tableBlockInfoList));
+                getRawResultIterator(configuration, segmentId, task, tableBlockInfoList, builder));
           } else {
             resultList.get(CarbonCompactionUtil.SORTED_IDX).add(
-                getRawResultIterator(configuration, segmentId, task, tableBlockInfoList));
+                getRawResultIterator(configuration, segmentId, task, tableBlockInfoList, builder));
           }
         }
       }
@@ -176,7 +177,7 @@ public class CarbonCompactionExecutor {
   }
 
   private RawResultIterator getRawResultIterator(Configuration configuration, String segmentId,
-      String task, List<TableBlockInfo> tableBlockInfoList)
+      String task, List<TableBlockInfo> tableBlockInfoList, QueryModelBuilder builder)
       throws IOException {
     SegmentProperties sourceSegmentProperties =
         new SegmentProperties(tableBlockInfoList.get(0).getDataFileFooter().getColumnInTable());
@@ -191,9 +192,11 @@ public class CarbonCompactionExecutor {
         sourceSegmentProperties = getSourceSegmentProperties(
             Collections.singletonList(tableBlockInfoList.get(0).getDataFileFooter()));
       }
+      isNoSortBasedMerger = true;
+      QueryModel build = builder.build();
       return new RawResultIterator(
-          executeBlockList(tableBlockInfoList, segmentId, task, configuration),
-          sourceSegmentProperties, destinationSegProperties, true);
+          executeQuery(tableBlockInfoList, segmentId, task, configuration, build),
+          sourceSegmentProperties, destinationSegProperties, build);
     }
   }
 
@@ -264,20 +267,41 @@ public class CarbonCompactionExecutor {
   }
 
   /**
+   * get executor and execute the query model.
+   *
+   * @param blockList
+   * @return
+   */
+  private QueryExecutor executeQuery(List<TableBlockInfo> blockList,
+      String segmentId, String taskId, Configuration configuration, QueryModel queryModel)
+      throws IOException {
+    queryModel.setTableBlockInfos(blockList);
+    QueryStatisticsRecorder executorRecorder = CarbonTimeStatisticsFactory
+        .createExecutorRecorder(queryModel.getQueryId() + "_" + segmentId + "_" + taskId);
+    queryStatisticsRecorders.add(executorRecorder);
+    queryModel.setStatisticsRecorder(executorRecorder);
+    QueryExecutor queryExecutor = QueryExecutorFactory.getQueryExecutor(queryModel, configuration);
+    queryExecutorList.add(queryExecutor);
+    return queryExecutor;
+  }
+
+  /**
    * Below method will be used
    * for cleanup
    */
   public void close(List<RawResultIterator> rawResultIteratorList, long queryStartTime) {
     try {
-      // close all the iterators. Iterators might not closed in case of compaction failure
-      // or if process is killed
-      if (null != rawResultIteratorList) {
-        for (RawResultIterator rawResultIterator : rawResultIteratorList) {
-          rawResultIterator.close();
+      if (!isNoSortBasedMerger) {
+        // close all the iterators. Iterators might not closed in case of compaction failure
+        // or if process is killed
+        if (null != rawResultIteratorList) {
+          for (RawResultIterator rawResultIterator : rawResultIteratorList) {
+            rawResultIterator.close();
+          }
         }
-      }
-      for (QueryExecutor queryExecutor : queryExecutorList) {
-        queryExecutor.finish();
+        for (QueryExecutor queryExecutor : queryExecutorList) {
+          queryExecutor.finish();
+        }
       }
       logStatistics(queryStartTime);
     } catch (QueryExecutionException e) {

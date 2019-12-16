@@ -17,12 +17,19 @@
 
 package org.apache.carbondata.presto;
 
+import java.io.IOException;
 import java.util.List;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 import static java.util.Objects.requireNonNull;
 
 import org.apache.carbondata.core.metadata.schema.table.CarbonTable;
+import org.apache.carbondata.core.metadata.schema.table.TableInfo;
+import org.apache.carbondata.hadoop.api.CarbonInputFormat;
+import org.apache.carbondata.presto.hbase.HBaseConnection;
+import org.apache.carbondata.presto.hbase.HBaseRecordSet;
+import org.apache.carbondata.presto.hbase.split.HBaseSplit;
 import org.apache.carbondata.presto.impl.CarbonTableCacheModel;
 import org.apache.carbondata.presto.impl.CarbonTableReader;
 
@@ -30,17 +37,20 @@ import static org.apache.carbondata.presto.Types.checkType;
 
 import com.google.inject.Inject;
 import io.prestosql.plugin.hive.HdfsEnvironment;
+import io.prestosql.plugin.hive.HiveColumnHandle;
 import io.prestosql.plugin.hive.HiveConfig;
 import io.prestosql.plugin.hive.HivePageSourceFactory;
 import io.prestosql.plugin.hive.HivePageSourceProvider;
 import io.prestosql.plugin.hive.HiveRecordCursorProvider;
 import io.prestosql.plugin.hive.HiveSplit;
+import io.prestosql.plugin.hive.HiveTableHandle;
 import io.prestosql.spi.connector.ColumnHandle;
 import io.prestosql.spi.connector.ConnectorPageSource;
 import io.prestosql.spi.connector.ConnectorSession;
 import io.prestosql.spi.connector.ConnectorSplit;
 import io.prestosql.spi.connector.ConnectorTableHandle;
 import io.prestosql.spi.connector.ConnectorTransactionHandle;
+import io.prestosql.spi.connector.RecordPageSource;
 import io.prestosql.spi.connector.SchemaTableName;
 import io.prestosql.spi.type.TypeManager;
 import org.apache.hadoop.conf.Configuration;
@@ -56,6 +66,7 @@ public class CarbondataPageSourceProvider extends HivePageSourceProvider {
   private CarbonTableReader carbonTableReader;
   private String queryId;
   private HdfsEnvironment hdfsEnvironment;
+  private HBaseConnection hBaseConnection;
 
   @Inject public CarbondataPageSourceProvider(
       HiveConfig hiveConfig,
@@ -63,18 +74,19 @@ public class CarbondataPageSourceProvider extends HivePageSourceProvider {
       Set<HiveRecordCursorProvider> cursorProviders,
       Set<HivePageSourceFactory> pageSourceFactories,
       TypeManager typeManager,
-      CarbonTableReader carbonTableReader) {
+      CarbonTableReader carbonTableReader,
+      HBaseConnection hBaseConnection) {
     super(hiveConfig, hdfsEnvironment, cursorProviders, pageSourceFactories, typeManager);
     this.carbonTableReader = requireNonNull(carbonTableReader, "carbonTableReader is null");
     this.hdfsEnvironment = hdfsEnvironment;
+    this.hBaseConnection = requireNonNull(hBaseConnection, "hBaseConnection is null");
   }
 
   @Override
   public ConnectorPageSource createPageSource(ConnectorTransactionHandle transactionHandle,
       ConnectorSession session, ConnectorSplit split, ConnectorTableHandle table,
       List<ColumnHandle> columns) {
-    HiveSplit carbonSplit =
-        checkType(split, HiveSplit.class, "split is not class HiveSplit");
+    HiveSplit carbonSplit = checkType(split, HiveSplit.class, "split is not class HiveSplit");
     this.queryId = carbonSplit.getSchema().getProperty("queryId");
     if (this.queryId == null) {
       // Fall back to hive pagesource.
@@ -85,10 +97,21 @@ public class CarbondataPageSourceProvider extends HivePageSourceProvider {
         new Path(carbonSplit.getSchema().getProperty("tablePath")));
     configuration = carbonTableReader.updateS3Properties(configuration);
     CarbonTable carbonTable = getCarbonTable(carbonSplit, configuration);
-    boolean isDirectVectorFill = carbonTableReader.config.getPushRowFilter() == null ||
-        carbonTableReader.config.getPushRowFilter().equalsIgnoreCase("false");
-    return new CarbondataPageSource(
-        carbonTable, queryId, carbonSplit, columns, table, configuration, isDirectVectorFill);
+    if (carbonSplit.getSchema().getProperty("carbonSplit") != null) {
+      boolean isDirectVectorFill =
+          carbonTableReader.config.getPushRowFilter() == null || carbonTableReader.config.getPushRowFilter().equalsIgnoreCase("false");
+      return new CarbondataPageSource(carbonTable, queryId, carbonSplit, columns, table,
+          configuration, isDirectVectorFill);
+    } else {
+      List<HiveColumnHandle> columnHandles =
+          columns.stream().map(HiveColumnHandle.class::cast).collect(Collectors.toList());
+      HBaseSplit hBaseSplit =
+          HBaseSplit.convertSplit(carbonSplit.getSchema().getProperty("hbaseSplit"));
+      HBaseRecordSet recordSet = new HBaseRecordSet(hBaseConnection, session, hBaseSplit, columnHandles.stream().filter(f -> !f.getName().equalsIgnoreCase("rowtimestamp")).collect(
+          Collectors.toList()));
+      return new RecordPageSource(recordSet);
+    }
+
   }
 
   /**
@@ -96,9 +119,19 @@ public class CarbondataPageSourceProvider extends HivePageSourceProvider {
    * @return
    */
   private CarbonTable getCarbonTable(HiveSplit carbonSplit, Configuration configuration) {
+    try {
+      configuration.set(CarbonInputFormat.TABLE_INFO,
+          carbonSplit.getSchema().getProperty(CarbonInputFormat.TABLE_INFO));
+      TableInfo tableInfo = CarbonInputFormat.getTableInfo(configuration);
+      if (tableInfo != null) {
+        return CarbonTable.buildFromTableInfo(tableInfo);
+      }
+    } catch (IOException e) {
+      throw new RuntimeException(e);
+    }
     CarbonTableCacheModel tableCacheModel = carbonTableReader
         .getCarbonCache(new SchemaTableName(carbonSplit.getDatabase(), carbonSplit.getTable()),
-            carbonSplit.getSchema().getProperty("tablePath"), configuration);
+            carbonSplit.getSchema().getProperty("tablePath"), configuration, null);
     checkNotNull(tableCacheModel, "tableCacheModel should not be null");
     checkNotNull(tableCacheModel.getCarbonTable(),
         "tableCacheModel.carbonTable should not be null");

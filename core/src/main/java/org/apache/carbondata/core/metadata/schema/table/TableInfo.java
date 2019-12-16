@@ -272,6 +272,10 @@ public class TableInfo implements Serializable, Writable {
     return identifier;
   }
 
+  public void setIdentifier(AbsoluteTableIdentifier identifier) {
+    this.identifier = identifier;
+  }
+
   public byte[] serialize() throws IOException {
     ByteArrayOutputStream bao = new ByteArrayOutputStream();
     this.write(new DataOutputStream(bao));

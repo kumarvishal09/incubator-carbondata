@@ -44,6 +44,7 @@ import org.apache.carbondata.core.mutate.{CarbonUpdateUtil, DeleteDeltaBlockDeta
 import org.apache.carbondata.core.mutate.data.{BlockMappingVO, RowCountDetailsVO}
 import org.apache.carbondata.core.readcommitter.TableStatusReadCommittedScope
 import org.apache.carbondata.core.statusmanager.{LoadMetadataDetails, SegmentStatus, SegmentStatusManager, SegmentUpdateStatusManager}
+import org.apache.carbondata.core.transaction.TransactionManager
 import org.apache.carbondata.core.util.{CarbonProperties, CarbonUtil, ThreadLocalSessionInfo}
 import org.apache.carbondata.core.util.path.CarbonTablePath
 import org.apache.carbondata.core.writer.CarbonDeleteDeltaWriterImpl
@@ -51,8 +52,9 @@ import org.apache.carbondata.events.{IndexServerLoadEvent, OperationContext, Ope
 import org.apache.carbondata.hadoop.api.{CarbonInputFormat, CarbonTableInputFormat}
 import org.apache.carbondata.processing.exception.MultipleMatchingException
 import org.apache.carbondata.processing.loading.FailureCauses
-import org.apache.carbondata.spark.DeleteDeltaResultImpl
+import org.apache.carbondata.spark.DeleteDelataResultImpl
 import org.apache.carbondata.spark.util.CarbonSparkUtil
+import org.apache.carbondata.tranaction.SessionTransactionManager
 
 object DeleteExecution {
   val LOGGER = LogServiceFactory.getLogService(this.getClass.getName)
@@ -127,7 +129,7 @@ object DeleteExecution {
       dataRdd
     }
 
-    val (carbonInputFormat, job) = createCarbonInputFormat(absoluteTableIdentifier)
+    val (carbonInputFormat, job) = createCarbonInputFormat(sparkSession, absoluteTableIdentifier)
     CarbonInputFormat.setTableInfo(job.getConfiguration, carbonTable.getTableInfo)
     val keyRdd = tupleId match {
       case Some(id) =>
@@ -150,7 +152,7 @@ object DeleteExecution {
     // if no loads are present then no need to do anything.
     if (keyRdd.partitions.length == 0) {
       return (Array.empty[List[(SegmentStatus,
-        (SegmentUpdateDetails, ExecutionErrors, Long))]], null)
+        (SegmentUpdateDetails, ExecutionErrors, Long))]], new BlockMappingVO())
     }
     val blockMappingVO =
       carbonInputFormat.getBlockRowCount(
@@ -310,7 +312,8 @@ object DeleteExecution {
           val alreadyDeletedRows: Long = rowCountDetailsVO.getDeletedRowsInBlock
           val totalDeletedRows: Long = alreadyDeletedRows + countOfRows
           segmentUpdateDetails.setDeletedRowsInBlock(totalDeletedRows.toString)
-          if (totalDeletedRows == rowCountDetailsVO.getTotalNumberOfRows) {
+          // TODO handle properly for merge command in case of history table
+          if (false && totalDeletedRows == rowCountDetailsVO.getTotalNumberOfRows) {
             segmentUpdateDetails.setSegmentStatus(SegmentStatus.MARKED_FOR_DELETE)
           }
           else {
@@ -498,11 +501,28 @@ object DeleteExecution {
     }
   }
 
-  private def createCarbonInputFormat(absoluteTableIdentifier: AbsoluteTableIdentifier) :
+  private def createCarbonInputFormat(sparkSession: SparkSession,
+      absoluteTableIdentifier: AbsoluteTableIdentifier) :
   (CarbonTableInputFormat[Array[Object]], Job) = {
     val carbonInputFormat = new CarbonTableInputFormat[Array[Object]]()
     val job: Job = CarbonSparkUtil.createHadoopJob()
     FileInputFormat.addInputPath(job, new Path(absoluteTableIdentifier.getTablePath))
+    val fullTableName = String.join(".",
+      absoluteTableIdentifier.getDatabaseName,
+      absoluteTableIdentifier.getTableName)
+    val transactionId = TransactionManager.getInstance()
+      .getTransactionManager
+      .asInstanceOf[SessionTransactionManager]
+      .getTransactionId(sparkSession, fullTableName)
+    val segmentId = TransactionManager.getInstance()
+      .getTransactionManager
+      .getCurrentTransactionSegment(transactionId, fullTableName)
+    if (null != segmentId) {
+      val segment: Array[Segment] = new Array[Segment](1)
+      segment(0) = Segment.toSegment(segmentId)
+      CarbonInputFormat
+          .setSegmentsToAccess(job.getConfiguration, segment.toList.asJava)
+    }
     (carbonInputFormat, job)
   }
 }
