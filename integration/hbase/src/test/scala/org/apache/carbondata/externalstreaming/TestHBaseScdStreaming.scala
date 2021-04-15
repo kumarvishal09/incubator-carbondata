@@ -6,11 +6,13 @@ import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.execution.command.management.CarbonAddExternalStreamingSegmentCommand
 import org.apache.spark.sql.execution.datasources.hbase.{HBaseRelation, HBaseTableCatalog, HandOffOptions, HandoffHbaseSegmentCommand, SparkHBaseConf}
 import org.apache.spark.sql.test.util.QueryTest
+import org.junit.Ignore
 import org.scalatest.BeforeAndAfterAll
 
 import org.apache.carbondata.core.util.CarbonProperties
 import org.apache.carbondata.hbase.HBaseConstants
 
+@Ignore
 class TestHBaseScdStreaming extends QueryTest with BeforeAndAfterAll {
   var htu: HBaseTestingUtility = _
   var loadTimestamp: Long = 0

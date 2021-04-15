@@ -42,9 +42,8 @@ import org.apache.carbondata.core.datastore.impl.FileFactory
 import org.apache.carbondata.core.indexstore.PrunedSegmentInfo
 import org.apache.carbondata.core.metadata.AbsoluteTableIdentifier
 import org.apache.carbondata.core.readcommitter.ReadCommittedScope
-import org.apache.carbondata.core.statusmanager.{SegmentStatus, SegmentStatusManager, FileFormat => FileFormatName}
+import org.apache.carbondata.core.statusmanager.{FileFormat => FileFormatName, LoadMetadataDetails, SegmentStatus, SegmentStatusManager}
 import org.apache.carbondata.core.util.{CarbonProperties, CarbonSessionInfo, SessionParams, ThreadLocalSessionInfo}
-import org.apache.carbondata.hadoop.api.CarbonInputFormat
 
 object MixedFormatHandler {
 
@@ -130,23 +129,36 @@ object MixedFormatHandler {
     }
   }
 
+  def extraSegments(identifier: AbsoluteTableIdentifier,
+      readCommittedScope: ReadCommittedScope): Array[LoadMetadataDetails] = {
+    val loadMetadataDetails = readCommittedScope.getSegmentList
+    val segsToAccess = getSegmentsToAccess(identifier)
+    loadMetadataDetails.filter { metaDetail =>
+      metaDetail.getSegmentStatus.equals(SegmentStatus.SUCCESS) ||
+      metaDetail.getSegmentStatus.equals(SegmentStatus.LOAD_PARTIAL_SUCCESS)
+    }.filterNot { currLoad =>
+      currLoad.getFileFormat.equals(FileFormatName.COLUMNAR_V3) ||
+      currLoad.getFileFormat.equals(FileFormatName.ROW_V1)
+    }.filter {
+      l => segsToAccess.isEmpty || segsToAccess.contains(l.getLoadName)
+    }
+  }
+
   /**
-   * Generates the RDD for non carbon segments. It uses the spark underlying fileformats and
+   * Generates the RDD for non carbon segments. It uses the spark underlying file formats and
    * generates the RDD in its native format without changing any of its flow to keep the original
    * performance and features.
    *
    * If multiple segments are with different formats like parquet , orc etc then it creates RDD for
    * each format segments and union them.
    */
-  def extraRDD(plan:LogicalPlan,
+  def extraRDD(plan: LogicalPlan,
       l: LogicalRelation,
       projects: Seq[NamedExpression],
       filters: Seq[Expression],
-      prunedSegmentInfo:List[PrunedSegmentInfo],
+      prunedSegmentInfo: Map[FileFormatName, List[PrunedSegmentInfo]],
       supportBatch: Boolean = true): Option[(RDD[InternalRow], Boolean)] = {
-    val rdds = prunedSegmentInfo.filter(p => !p.getSegment.isCarbonSegment)
-      .groupBy(_.getSegment.getLoadMetadataDetails.getFileFormat)
-      .map { case (format, prunedSegmentInfo) =>
+    val rdds = prunedSegmentInfo.map { case (format, prunedSegmentInfo) =>
         MixedFormatHandlerFactory.createFormatBasedHandler(format)
           .getRDDForExternalSegments(plan,
             format,
@@ -237,6 +249,7 @@ object MixedFormatHandler {
     val allSegments = SegmentStatusManager.readLoadMetadata(metadataPath)
     allSegments.exists(a => a.getFileFormat != null && !a.isCarbonFormat)
   }
+
 
 
   object MixedFormatHandlerFactory {

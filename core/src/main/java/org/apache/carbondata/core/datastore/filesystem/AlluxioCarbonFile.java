@@ -20,6 +20,7 @@ package org.apache.carbondata.core.datastore.filesystem;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
+import java.util.Objects;
 
 import org.apache.carbondata.common.logging.LogServiceFactory;
 import org.apache.carbondata.core.constants.CarbonCommonConstants;
@@ -29,6 +30,7 @@ import org.apache.carbondata.core.util.CarbonUtil;
 import org.apache.hadoop.fs.FSDataOutputStream;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.hdfs.DistributedFileSystem;
 import org.apache.log4j.Logger;
 
 public class AlluxioCarbonFile extends HDFSCarbonFile {
@@ -110,10 +112,13 @@ public class AlluxioCarbonFile extends HDFSCarbonFile {
   public boolean renameForce(String changeToName) {
     try {
       // check if any file with the new name exists and delete it.
-      CarbonFile newCarbonFile = FileFactory.getCarbonFile(changetoName);
+      CarbonFile newCarbonFile = FileFactory.getCarbonFile(changeToName);
       newCarbonFile.delete();
+      if (Objects.isNull(((DistributedFileSystem) fileSystem).getClient())) {
+        return false;
+      }
       // rename the old file to the new name.
-      return fileSystem.rename(path, new Path(changetoName));
+      return Objects.nonNull(fileSystem) && fileSystem.rename(path, new Path(changeToName));
     } catch (IOException e) {
       LOGGER.error("Exception occurred: " + e.getMessage(), e);
       return false;

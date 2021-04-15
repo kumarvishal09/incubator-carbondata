@@ -61,6 +61,7 @@ public class SegmentUpdateStatusManager {
   private SegmentUpdateDetails[] updateDetails;
   private Map<String, SegmentUpdateDetails> blockAndDetailsMap;
   private boolean isPartitionTable;
+  private String updateStatusFileName;
   /**
    * It contains the mapping of segment path and corresponding delete delta file paths,
    * avoiding listing these files for every query
@@ -69,7 +70,7 @@ public class SegmentUpdateStatusManager {
 
   public SegmentUpdateStatusManager(CarbonTable table,
       LoadMetadataDetails[] segmentDetails) {
-    this(table, segmentDetails, null);
+    this(table, segmentDetails, null, null);
   }
 
   /**
@@ -78,23 +79,31 @@ public class SegmentUpdateStatusManager {
    * of a particular version.
    */
   public SegmentUpdateStatusManager(CarbonTable table,
-      LoadMetadataDetails[] segmentDetails, String updateVersion) {
+      LoadMetadataDetails[] segmentDetails, String updateDeltaVersion,
+      String updateStatusVersion) {
     this.identifier = table.getAbsoluteTableIdentifier();
+    if (updateStatusVersion != null) {
+      this.updateStatusFileName = CarbonUpdateUtil.getUpdateStatusFileName(updateStatusVersion);
+    }
     this.isPartitionTable = table.isHivePartitionTable();
     // current it is used only for read function scenarios, as file update always requires to work
     // on latest file status.
     this.segmentDetails = segmentDetails;
     updateDetails = readLoadMetadata();
-    updateUpdateDetails(updateVersion);
+    updateUpdateDetails(updateDeltaVersion);
     populateMap();
   }
 
   public SegmentUpdateStatusManager(CarbonTable table) {
-    this(table, (String) null);
+    this(table, (String) null, null);
   }
 
-  public SegmentUpdateStatusManager(CarbonTable table, String updateVersion) {
+  public SegmentUpdateStatusManager(CarbonTable table, String updateVersion,
+      String updateStatusVersion) {
     this.identifier = table.getAbsoluteTableIdentifier();
+    if (updateStatusVersion != null) {
+      this.updateStatusFileName = CarbonUpdateUtil.getUpdateStatusFileName(updateStatusVersion);
+    }
     // current it is used only for read function scenarios, as file update always requires to work
     // on latest file status.
     if (!table.getTableInfo().isTransactionalTable()) {
@@ -485,6 +494,9 @@ public class SegmentUpdateStatusManager {
    * @return updateStatusFileName
    */
   private String getUpdatedStatusIdentifier() {
+    if (updateStatusFileName != null) {
+      return updateStatusFileName;
+    }
     if (segmentDetails.length == 0) {
       return null;
     }

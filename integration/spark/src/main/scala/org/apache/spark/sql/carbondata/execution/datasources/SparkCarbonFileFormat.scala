@@ -47,7 +47,7 @@ import org.apache.spark.util.SerializableConfiguration
 import org.apache.carbondata.common.annotations.{InterfaceAudience, InterfaceStability}
 import org.apache.carbondata.common.logging.LogServiceFactory
 import org.apache.carbondata.converter.SparkDataTypeConverterImpl
-import org.apache.carbondata.core.constants.CarbonCommonConstants
+import org.apache.carbondata.core.constants.{CarbonCommonConstants, CarbonLoadOptionConstants}
 import org.apache.carbondata.core.datastore.impl.FileFactory
 import org.apache.carbondata.core.index.IndexFilter
 import org.apache.carbondata.core.indexstore.BlockletDetailInfo

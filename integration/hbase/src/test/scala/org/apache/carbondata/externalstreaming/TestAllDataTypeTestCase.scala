@@ -9,7 +9,9 @@ import org.scalatest.BeforeAndAfterAll
 import org.apache.carbondata.core.util.CarbonProperties
 import org.apache.carbondata.hbase.HBaseConstants
 import org.apache.spark.sql.functions._
+import org.junit.Ignore
 
+@Ignore
 class TestAllDataTypeTestCase extends QueryTest with BeforeAndAfterAll {
 
   var htu: HBaseTestingUtility = _

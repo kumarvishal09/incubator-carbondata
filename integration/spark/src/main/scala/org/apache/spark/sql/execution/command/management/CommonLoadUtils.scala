@@ -30,7 +30,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.{InternalRow, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{NoSuchTableException, UnresolvedAttribute}
-import org.apache.spark.sql.catalyst.catalog.CatalogTable
+import org.apache.spark.sql.catalyst.catalog.{CatalogTable, HiveTableRelation}
 import org.apache.spark.sql.catalyst.expressions.{Ascending, AttributeReference, SortOrder}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project}
 import org.apache.spark.sql.execution.LogicalRDD
@@ -57,6 +57,7 @@ import org.apache.carbondata.core.metadata.schema.table.column.ColumnSchema
 import org.apache.carbondata.core.mutate.{CarbonUpdateUtil, TupleIdEnum}
 import org.apache.carbondata.core.segmentmeta.{SegmentMetaDataInfo, SegmentMetaDataInfoStats}
 import org.apache.carbondata.core.statusmanager.{LoadMetadataDetails, SegmentStatus, SegmentStatusManager}
+import org.apache.carbondata.core.transaction.{TransactionActionType, TransactionManager}
 import org.apache.carbondata.core.util._
 import org.apache.carbondata.core.util.path.CarbonTablePath
 import org.apache.carbondata.events.{BuildIndexPostExecutionEvent, BuildIndexPreExecutionEvent, OperationContext, OperationListenerBus}
@@ -69,6 +70,7 @@ import org.apache.carbondata.processing.util.{CarbonBadRecordUtil, CarbonDataPro
 import org.apache.carbondata.spark.load.{CsvRDDHelper, DataLoadProcessorStepOnSpark, GlobalSortHelper}
 import org.apache.carbondata.spark.rdd.CarbonDataRDDFactory
 import org.apache.carbondata.spark.util.CarbonScalaUtil
+import org.apache.carbondata.tranaction.{CompactionTransactionAction, PrePrimingAction, SessionTransactionManager}
 
 object CommonLoadUtils {
   val LOGGER = LogServiceFactory.getLogService(this.getClass.getName)
@@ -111,11 +113,10 @@ object CommonLoadUtils {
       databaseNameOp: Option[String],
       tableName: String,
       tableInfoOp: Option[TableInfo],
-      partition: Map[String, Option[String]]): (Long, CarbonTable, String, LogicalRelation,
+      partition: Map[String, Option[String]]): (Long, CarbonTable, String, CatalogTable,
       Map[String, Option[String]]) = {
     val dbName = CarbonEnv.getDatabaseName(databaseNameOp)(sparkSession)
     var table: CarbonTable = null
-    var logicalPartitionRelation: LogicalRelation = null
     var sizeInBytes: Long = 0L
 
     table = if (tableInfoOp.isDefined) {
@@ -123,17 +124,20 @@ object CommonLoadUtils {
     } else {
       CarbonEnv.getCarbonTable(Option(dbName), tableName)(sparkSession)
     }
+    var catalogTable: CatalogTable = null
     var finalPartition: Map[String, Option[String]] = Map.empty
     if (table.isHivePartitionTable) {
-      logicalPartitionRelation =
-        new FindDataSourceTable(sparkSession).apply(
-          sparkSession.sessionState.catalog.lookupRelation(
-            TableIdentifier(tableName, databaseNameOp))).collect {
-          case l: LogicalRelation => l
-        }.head
+      new FindDataSourceTable(sparkSession).apply(
+        sparkSession.sessionState.catalog.lookupRelation(
+          TableIdentifier(tableName, databaseNameOp))).collect {
+        case l: LogicalRelation =>
+          catalogTable = l.catalogTable.get
+          sizeInBytes = l.relation.sizeInBytes
+        case h: HiveTableRelation => catalogTable = h.tableMeta
+      }
       finalPartition = getCompletePartitionValues(partition, table)
     }
-    (sizeInBytes, table, dbName, logicalPartitionRelation, finalPartition)
+    (sizeInBytes, table, dbName, catalogTable, finalPartition)
   }
 
   def prepareLoadModel(hadoopConf: Configuration,
@@ -704,6 +708,9 @@ object CommonLoadUtils {
     val options = new mutable.HashMap[String, String]()
     options ++= catalogTable.storage.properties
     options += (("overwrite", overWrite.toString))
+    options +=
+    (("dbName", CarbonEnv.getDatabaseName(catalogTable.identifier.database)(sparkSession)))
+    options += (("tableName", catalogTable.identifier.table))
     if (partition.nonEmpty) {
       val staticPartitionStr = ObjectSerializationUtil.convertObjectToString(
         new util.HashMap[String, Boolean](
@@ -726,6 +733,13 @@ object CommonLoadUtils {
       val currLoadEntry =
         ObjectSerializationUtil.convertObjectToString(loadModel.getCurrentLoadMetadataDetail)
       options += (("currentloadentry", currLoadEntry))
+    }
+    val transactionId = TransactionManager.getInstance()
+      .getTransactionManager
+      .asInstanceOf[SessionTransactionManager]
+      .getTransactionId(sparkSession, table.getDatabaseName + "." + table.getTableName)
+    if(null != transactionId) {
+      options += (("transactionId", transactionId))
     }
     val hdfsRelation = HadoopFsRelation(
       location = catalog,
@@ -860,7 +874,7 @@ object CommonLoadUtils {
    */
   def loadDataWithPartition(loadParams: CarbonLoadParams): Seq[Row] = {
     val table = loadParams.carbonLoadModel.getCarbonDataLoadSchema.getCarbonTable
-    val catalogTable: CatalogTable = loadParams.logicalPartitionRelation.catalogTable.get
+    val catalogTable: CatalogTable = loadParams.catalogTable
     CarbonThreadUtil.threadSet("partition.operationcontext", loadParams.operationContext)
     val attributes = if (loadParams.scanResultRDD.isDefined) {
       // take the already re-arranged attributes
@@ -877,6 +891,12 @@ object CommonLoadUtils {
     }
     var partitionsLen = 0
     val sortScope = CarbonDataProcessorUtil.getSortScope(loadParams.carbonLoadModel.getSortScope)
+    val transactionManager = TransactionManager
+      .getInstance()
+      .getTransactionManager
+      .asInstanceOf[SessionTransactionManager]
+    val transactionId = transactionManager.getTransactionId(loadParams.sparkSession,
+      table.getDatabaseName + "." + table.getTableName)
     val partitionValues = if (loadParams.finalPartition.nonEmpty) {
       loadParams.finalPartition.filter(_._2.nonEmpty).map { case (col, value) =>
         catalogTable.schema.find(_.name.equalsIgnoreCase(col)) match {
@@ -901,6 +921,17 @@ object CommonLoadUtils {
       val query: LogicalPlan = if ((loadParams.dataFrame.isDefined) ||
                                    loadParams.scanResultRDD.isDefined) {
         val (rdd, dfAttributes) = {
+          if (loadParams.updateModel.isDefined && !loadParams.updateModel.get.loadAsNewSegment) {
+            // Get the updated query plan in case of update scenario
+            val updatedFrame = Dataset.ofRows(
+              loadParams.sparkSession,
+              getLogicalQueryForUpdate(
+                loadParams.sparkSession,
+                catalogTable,
+                loadParams.dataFrame.get,
+                loadParams.carbonLoadModel))
+            (updatedFrame.rdd, updatedFrame.schema)
+          } else {
             // Get the updated query plan in case of update scenario
             if (loadParams.finalPartition.nonEmpty) {
               val headers = loadParams.carbonLoadModel
@@ -916,6 +947,7 @@ object CommonLoadUtils {
             } else {
               (null, null)
             }
+          }
         }
         if (loadParams.dataFrame.isDefined) {
           val expectedColumns = {
@@ -1060,13 +1092,15 @@ object CommonLoadUtils {
         throw ex
     } finally {
       CarbonThreadUtil.threadUnset("partition.operationcontext")
-      if (loadParams.isOverwriteTable) {
-        IndexStoreManager.getInstance().clearIndex(table.getAbsoluteTableIdentifier)
-        // Clean the overwriting segments if any.
-        SegmentFileStore.cleanSegments(
-          table,
-          null,
-          false)
+      if (null == transactionId) {
+        if (loadParams.isOverwriteTable) {
+          IndexStoreManager.getInstance().clearIndex(table.getAbsoluteTableIdentifier)
+          // Clean the overwriting segments if any.
+          SegmentFileStore.cleanSegments(
+            table,
+            null,
+            false)
+        }
       }
       if (partitionsLen > 1) {
         // clean cache only if persisted and keeping unpersist non-blocking as non-blocking call
@@ -1079,7 +1113,7 @@ object CommonLoadUtils {
       }
     }
     // Pre-priming for Partition table here
-    if (!StringUtils.isEmpty(loadParams.carbonLoadModel.getSegmentId)) {
+    if (null == transactionId && !StringUtils.isEmpty(loadParams.carbonLoadModel.getSegmentId)) {
       DistributedRDDUtils.triggerPrepriming(loadParams.sparkSession,
         table,
         Seq(),
@@ -1088,34 +1122,53 @@ object CommonLoadUtils {
         List(loadParams.carbonLoadModel.getSegmentId))
     }
     try {
-      val compactedSegments = new util.ArrayList[String]()
-      // Trigger auto compaction
-      CarbonDataRDDFactory.handleSegmentMerging(
-        loadParams.sparkSession.sqlContext,
-        loadParams.carbonLoadModel
-          .getCopyWithPartition(loadParams.carbonLoadModel.getCsvHeader,
-            loadParams.carbonLoadModel.getCsvDelimiter),
-        table,
-        compactedSegments,
-        loadParams.operationContext)
-      loadParams.carbonLoadModel.setMergedSegmentIds(compactedSegments)
+      if (null == transactionId) {
+        val compactedSegments = new util.ArrayList[String]()
+        // Trigger auto compaction
+        CarbonDataRDDFactory.handleSegmentMerging(
+          loadParams.sparkSession.sqlContext,
+          loadParams.carbonLoadModel
+            .getCopyWithPartition(loadParams.carbonLoadModel.getCsvHeader,
+              loadParams.carbonLoadModel.getCsvDelimiter),
+          table,
+          compactedSegments,
+          loadParams.operationContext)
+        loadParams.carbonLoadModel.setMergedSegmentIds(compactedSegments)
+      } else {
+        transactionManager.recordTransactionAction(transactionId,
+          new PrePrimingAction(loadParams.sparkSession,
+            loadParams.carbonLoadModel,
+            loadParams.hadoopConf,
+            loadParams.operationContext), TransactionActionType.PERF_SCOPE)
+        if(!(table.getDatabaseName + "." + table.getTableName).endsWith("_ctrl")) {
+          transactionManager.recordTransactionAction(transactionId,
+            new CompactionTransactionAction(loadParams.sparkSession,
+              loadParams.carbonLoadModel,
+              loadParams.operationContext), TransactionActionType.PERF_SCOPE)
+        }
+      }
     } catch {
       case e: Exception =>
         LOGGER.error(
           "Auto-Compaction has failed. Ignoring this exception because the " +
           "load is passed.", e)
     }
-    val specs =
-      SegmentFileStore.getPartitionSpecs(loadParams.carbonLoadModel.getSegmentId,
-        loadParams.carbonLoadModel.getTablePath,
-        loadParams.carbonLoadModel.getLoadMetadataDetails.asScala.toArray)
-    if (specs != null && !specs.isEmpty) {
-      specs.asScala.map { spec =>
-        Row(spec.getPartitions.asScala.mkString("/"), spec.getLocation.toString, spec.getUuid)
+    val returnVal = if (null == transactionId) {
+      val specs =
+        SegmentFileStore.getPartitionSpecs(loadParams.carbonLoadModel.getSegmentId,
+          loadParams.carbonLoadModel.getTablePath,
+          loadParams.carbonLoadModel.getLoadMetadataDetails.asScala.toArray)
+      if (specs != null && !specs.isEmpty) {
+        specs.asScala.map { spec =>
+          Row(spec.getPartitions.asScala.mkString("/"), spec.getLocation.toString, spec.getUuid)
+        }
+      } else {
+        Seq(Row(loadParams.carbonLoadModel.getSegmentId))
       }
     } else {
-      Seq(Row(loadParams.carbonLoadModel.getSegmentId))
+      Seq.empty[Row]
     }
+    returnVal
   }
 
   /**

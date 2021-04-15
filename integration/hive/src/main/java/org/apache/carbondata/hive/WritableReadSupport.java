@@ -18,6 +18,7 @@
 package org.apache.carbondata.hive;
 
 import java.io.IOException;
+import java.sql.Timestamp;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -36,6 +37,7 @@ import org.apache.hadoop.hive.common.type.HiveDecimal;
 import org.apache.hadoop.hive.serde2.io.*;
 import org.apache.hadoop.hive.serde2.io.DoubleWritable;
 import org.apache.hadoop.hive.serde2.io.ShortWritable;
+import org.apache.hadoop.hive.serde2.objectinspector.primitive.WritableTimestampObjectInspector;
 import org.apache.hadoop.io.ArrayWritable;
 import org.apache.hadoop.io.BooleanWritable;
 import org.apache.hadoop.io.BytesWritable;
@@ -233,12 +235,15 @@ public class WritableReadSupport<T> implements CarbonReadSupport<T> {
     } else if (dataType == DataTypes.DATE) {
       return new DateWritable((Integer) obj);
     } else if (dataType == DataTypes.TIMESTAMP) {
-      SimpleDateFormat dateFormat =
-          new SimpleDateFormat(CarbonCommonConstants.CARBON_TIMESTAMP_DEFAULT_FORMAT);
-      String formattedTime = dateFormat.format((long) obj / 1000);
-      org.apache.hadoop.hive.common.type.Timestamp t =
-          org.apache.hadoop.hive.common.type.Timestamp.valueOf(formattedTime);
-      return new TimestampWritableV2(t);
+      //TODO check with ravi
+//      SimpleDateFormat dateFormat =
+//          new SimpleDateFormat(CarbonCommonConstants.CARBON_TIMESTAMP_DEFAULT_FORMAT);
+//      String formattedTime = dateFormat.format((long) obj / 1000);
+//      org.apache.hadoop.hive.common.type.Timestamp t =
+//          org.apache.hadoop.hive.common.type.Timestamp.valueOf(formattedTime);
+//      return new TimestampWritableV2(t);
+      WritableTimestampObjectInspector ins = new WritableTimestampObjectInspector();
+      return ins.getPrimitiveWritableObject(ins.create(new Timestamp((long) obj / 1000)));
     } else if (dataType == DataTypes.STRING) {
       return new Text(obj.toString());
     } else if (DataTypes.isArrayType(dataType)) {

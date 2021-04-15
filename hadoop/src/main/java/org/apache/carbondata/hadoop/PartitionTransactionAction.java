@@ -18,14 +18,14 @@
 package org.apache.carbondata.hadoop;
 
 import java.io.IOException;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.Stream;
 
-import org.apache.carbondata.core.datamap.DataMapStoreManager;
-import org.apache.carbondata.core.datamap.Segment;
-import org.apache.carbondata.core.datamap.status.DataMapStatusManager;
+import org.apache.carbondata.core.index.IndexStoreManager;
+import org.apache.carbondata.core.index.Segment;
 import org.apache.carbondata.core.locks.ICarbonLock;
 import org.apache.carbondata.core.metadata.SegmentFileStore;
 import org.apache.carbondata.core.metadata.schema.table.CarbonTable;
@@ -42,6 +42,7 @@ import org.apache.carbondata.processing.loading.model.CarbonLoadModel;
 import org.apache.carbondata.processing.util.CarbonLoaderUtil;
 
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.mapreduce.JobContext;
 
 public class PartitionTransactionAction implements TransactionAction {
 
@@ -105,14 +106,14 @@ public class PartitionTransactionAction implements TransactionAction {
       }
       CarbonLoaderUtil
           .recordNewLoadMetadata(loadMetadataDetails, carbonLoadModel, false, false, uuid,
-              deletedSegments, updatedSegments);
+              deletedSegments, updatedSegments, false);
       if (operationContext != null) {
         operationContext.setProperty("current.segmentfile", loadMetadataDetails.getSegmentFile());
       }
       commitJobFinal();
     } finally {
       if (!isCleanupDone && isOverwriteTable) {
-        DataMapStoreManager.getInstance().clearDataMaps(table.getAbsoluteTableIdentifier());
+        IndexStoreManager.getInstance().clearIndex(table.getAbsoluteTableIdentifier());
         // Clean the overwriting segments if any.
         SegmentFileStore.cleanSegments(table, null, false);
         isCleanupDone = true;
@@ -125,29 +126,30 @@ public class PartitionTransactionAction implements TransactionAction {
 
   private void commitJobFinal() throws IOException {
     CarbonTable carbonTable = carbonLoadModel.getCarbonDataLoadSchema().getCarbonTable();
-    DataMapStatusManager.disableAllLazyDataMaps(carbonTable);
     if (operationContext != null) {
       LoadEvents.LoadTablePostStatusUpdateEvent postStatusUpdateEvent =
           new LoadEvents.LoadTablePostStatusUpdateEvent(carbonLoadModel);
       try {
-        OperationListenerBus.getInstance().fireEvent(postStatusUpdateEvent, operationContext);
+        OperationListenerBus.getInstance()
+            .fireEvent(postStatusUpdateEvent, operationContext);
       } catch (Exception e) {
         throw new IOException(e);
       }
     }
-    String updateTime = configuration.get(CarbonTableOutputFormat.UPADTE_TIMESTAMP, null);
+    String updateTime = configuration.get(CarbonTableOutputFormat.UPDATE_TIMESTAMP, updatedTimeStamp);
     String segmentsToBeDeleted =
         configuration.get(CarbonTableOutputFormat.SEGMENTS_TO_BE_DELETED, "");
-    List<Segment> segmentDeleteList = Segment.toSegmentList(segmentsToBeDeleted.split(","), null);
-    Set<Segment> segmentSet = new HashSet<>(
-        new SegmentStatusManager(carbonTable.getAbsoluteTableIdentifier(), configuration)
-            .getValidAndInvalidSegments(carbonTable.isChildTableForMV()).getValidSegments());
+    List<Segment> segmentDeleteList = Collections.emptyList();
+    if (!segmentsToBeDeleted.trim().isEmpty()) {
+      segmentDeleteList = Segment.toSegmentList(segmentsToBeDeleted.split(","), null);
+    }
+    boolean isUpdateStatusFileUpdateRequired =
+        (configuration.get(CarbonTableOutputFormat.UPDATE_TIMESTAMP) != null);
     if (updateTime != null) {
-      CarbonUpdateUtil
-          .updateTableMetadataStatus(segmentSet, carbonTable, updateTime, true, segmentDeleteList);
-    } else if (updatedTimeStamp != null) {
-      CarbonUpdateUtil.updateTableMetadataStatus(segmentSet, carbonTable, updatedTimeStamp, true,
-          segmentDeleteList);
+      //TODO CHECK updateTime OR updatedTimeStamp TIME REQUIRED FOR UPDATTION
+      CarbonUpdateUtil.updateTableMetadataStatus(Collections.singleton(carbonLoadModel.getSegment()),
+          carbonTable, updatedTimeStamp, true,
+          isUpdateStatusFileUpdateRequired, segmentDeleteList);
     }
   }
 
@@ -162,7 +164,7 @@ public class PartitionTransactionAction implements TransactionAction {
       CarbonLoaderUtil.runCleanupForPartition(carbonLoadModel);
     } finally {
       if (!isCleanupDone && isOverwriteTable) {
-        DataMapStoreManager.getInstance().clearDataMaps(table.getAbsoluteTableIdentifier());
+        IndexStoreManager.getInstance().clearIndex(table.getAbsoluteTableIdentifier());
         // Clean the overwriting segments if any.
         SegmentFileStore.cleanSegments(table, null, false);
         isCleanupDone = true;
@@ -172,9 +174,9 @@ public class PartitionTransactionAction implements TransactionAction {
 
   public void recordUpdateDetails(long updateTime, Segment[] deletedSegments,
       boolean loadAsANewSegment) {
-    String currentUpdateTime = configuration.get(CarbonTableOutputFormat.UPADTE_TIMESTAMP, null);
+    String currentUpdateTime = configuration.get(CarbonTableOutputFormat.UPDATE_TIMESTAMP, null);
     if (null != currentUpdateTime) {
-      configuration.set(CarbonTableOutputFormat.UPADTE_TIMESTAMP, String.valueOf(updateTime));
+      configuration.set(CarbonTableOutputFormat.UPDATE_TIMESTAMP, String.valueOf(updateTime));
     }
     String segmentToBeDeleted =
         configuration.get(CarbonTableOutputFormat.SEGMENTS_TO_BE_DELETED, null);

@@ -26,6 +26,7 @@ import scala.collection.mutable
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{AnalysisException, CarbonEnv, CarbonToSparkAdapter, DataFrame, Dataset, Row, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.catalog.CatalogTable
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Literal, NamedExpression}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project}
 import org.apache.spark.sql.execution.command.{AtomicRunnableCommand, UpdateTableModel}
@@ -182,7 +183,7 @@ case class CarbonInsertIntoCommand(databaseNameOp: Option[String],
       }
       if (isNotReArranged) {
         // Re-arrange the catalog table schema and output for partition relation
-        logicalPartitionRelation =
+        catalogTable =
           if (carbonLoadModel.getCarbonDataLoadSchema.getCarbonTable.isMV) {
             // Re-arrange non-partition columns in the catalog table schema based on rearranged
             // mv index order. Example: MV columns: c1,c2(partition_column),c3(sort_column),c4.
@@ -192,9 +193,9 @@ case class CarbonInsertIntoCommand(databaseNameOp: Option[String],
             // changed to (c4,c1,c2,c3), which will be wrong. Hence, Reorder MV create column
             // order to (c1,c3,c4,c2) and use rearranged mv index (1,0,2,3) to rearrange
             // logical relation schema.
-            getReArrangedSchemaLogicalRelation(reArrangedMVIndex, logicalPartitionRelation)
+            getReArrangedSchemaLogicalRelation(reArrangedMVIndex, catalogTable)
           } else {
-            getReArrangedSchemaLogicalRelation(reArrangedIndex, logicalPartitionRelation)
+            getReArrangedSchemaLogicalRelation(reArrangedIndex, catalogTable)
           }
       }
     }
@@ -217,7 +218,7 @@ case class CarbonInsertIntoCommand(databaseNameOp: Option[String],
           operationContext = operationContext)
 
       // add the start entry for the new load in the table status file
-      if ((updateModel.isEmpty || updateModel.isDefined)
+      if ((updateModel.isEmpty || updateModel.isDefined && updateModel.get.loadAsNewSegment)
           && !table.isHivePartitionTable) {
         if (updateModel.isDefined) {
           carbonLoadModel.setFactTimeStamp(updateModel.get.updatedTimeStamp)
@@ -262,6 +263,8 @@ case class CarbonInsertIntoCommand(databaseNameOp: Option[String],
         Some(scanResultRdd),
         updateModel,
         operationContext)
+      LOGGER.info(s"Segment No. Assigned for table ${dbName}.${tableName} : " +
+                  s"${carbonLoadModel.getSegmentId}")
       LOGGER.info("Sort Scope : " + carbonLoadModel.getSortScope)
       val (rows, loadResult) = insertData(loadParams)
       loadResultForReturn = loadResult
@@ -294,6 +297,7 @@ case class CarbonInsertIntoCommand(databaseNameOp: Option[String],
         }
         throw ex
     }
+    LOGGER.info(s"Finished Load for  ${dbName}.${table}")
     if (loadResultForReturn != null && loadResultForReturn.getLoadName != null) {
       Seq(Row(loadResultForReturn.getLoadName))
     } else {
@@ -465,7 +469,11 @@ case class CarbonInsertIntoCommand(databaseNameOp: Option[String],
 
   def insertData(loadParams: CarbonLoadParams): (Seq[Row], LoadMetadataDetails) = {
     var rows = Seq.empty[Row]
-    val loadDataFrame = Some(dataFrame)
+    val loadDataFrame = if (updateModel.isDefined && !updateModel.get.loadAsNewSegment) {
+      Some(CommonLoadUtils.getDataFrameWithTupleID(Some(dataFrame)))
+    } else {
+      Some(dataFrame)
+    }
     val table = loadParams.carbonLoadModel.getCarbonDataLoadSchema.getCarbonTable
     var loadResult : LoadMetadataDetails = null
     if (table.isHivePartitionTable) {

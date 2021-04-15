@@ -46,7 +46,8 @@ import org.apache.carbondata.core.scan.filter.intf.ExpressionType
 import org.apache.carbondata.core.util.CarbonProperties
 import org.apache.carbondata.geo.{GeoUtils, InPolygonListUDF, InPolygonRangeListUDF, InPolygonUDF, InPolylineListUDF}
 import org.apache.carbondata.geo.scan.expression.{PolygonExpression, PolygonListExpression, PolygonRangeListExpression, PolylineListExpression}
-import org.apache.carbondata.index.{TextMatchMaxDocUDF, TextMatchUDF}
+import org.apache.carbondata.index.{SegmentSelector, TextMatchMaxDocUDF, TextMatchUDF}
+import org.apache.carbondata.segment.{ExcludeSegmentIdUDF, SegmentIdUDF}
 
 /**
  * All filter conversions are done here.
@@ -62,15 +63,16 @@ object CarbonFilters {
       relation: CarbonDatasourceHadoopRelation,
       predicate: SparkExpression,
       columnTypes: Map[String, SparkDataType],
-      isOr: Boolean = false): Option[Expression] = {
+      isOr: Boolean = false,
+      segmentSelection: SegmentSelector): Option[Expression] = {
 
     predicate match {
       case u: ScalaUDF =>
-        translateUDF(u.children, u.function, relation)
+        translateUDF(u.children, u.function, relation, segmentSelection)
       case Or(left, right) =>
-        translateOr(left, right, relation, columnTypes)
+        translateOr(left, right, relation, columnTypes, segmentSelection)
       case And(left, right) =>
-        translateAnd(left, right, relation, columnTypes, isOr)
+        translateAnd(left, right, relation, columnTypes, isOr, segmentSelection)
       case EqualTo(a: Attribute, Literal(v, _)) =>
         translateEqualTo(a.name, v, columnTypes)
       case EqualTo(Literal(v, _), a: Attribute) =>
@@ -210,7 +212,8 @@ object CarbonFilters {
   def translateUDF(
       children: Seq[SparkExpression],
       function: AnyRef,
-      relation: CarbonDatasourceHadoopRelation): Option[Expression] = {
+      relation: CarbonDatasourceHadoopRelation,
+      segmentSelection: SegmentSelector): Option[Expression] = {
     function match {
       case _: TextMatchUDF =>
         if (children.size > 1) {
@@ -252,6 +255,18 @@ object CarbonFilters {
         val (columnName, instance) = getGeoHashHandler(relation.carbonTable)
         Some(new PolygonRangeListExpression(children.head.toString(), children.last.toString(),
           columnName, instance))
+      case u: ScalaUDF if u.function.isInstanceOf[SegmentIdUDF] =>
+        if (u.children.size > 1) {
+          throw new MalformedCarbonCommandException("Expect one string in segment id")
+        }
+        segmentSelection.setIncludeSegmentIdString(u.children.head.toString())
+        None
+      case u: ScalaUDF if u.function.isInstanceOf[ExcludeSegmentIdUDF] =>
+        if (u.children.size > 1) {
+          throw new MalformedCarbonCommandException("Expect one string in segment id")
+        }
+        segmentSelection.setExcludeSegmentIdString(u.children.head.toString())
+        None
       case _ => None
     }
   }
@@ -265,9 +280,10 @@ object CarbonFilters {
       left : SparkExpression,
       right: SparkExpression,
       relation: CarbonDatasourceHadoopRelation,
-      columnTypes: Map[String, SparkDataType]) : Option[OrExpression] = {
-    val leftExpression = translateExpression(relation, left, columnTypes, true)
-    val rightExpression = translateExpression(relation, right, columnTypes, true)
+      columnTypes: Map[String, SparkDataType],
+      segmentSelection: SegmentSelector) : Option[OrExpression] = {
+    val leftExpression = translateExpression(relation, left, columnTypes, true, segmentSelection)
+    val rightExpression = translateExpression(relation, right, columnTypes, true, segmentSelection)
     if (leftExpression.isDefined && rightExpression.isDefined) {
       Some(new OrExpression(leftExpression.get, rightExpression.get))
     } else {
@@ -280,9 +296,10 @@ object CarbonFilters {
       right: SparkExpression,
       relation: CarbonDatasourceHadoopRelation,
       columnTypes: Map[String, SparkDataType],
-      isOr: Boolean): Option[Expression] = {
-    val leftExpression = translateExpression(relation, left, columnTypes, isOr)
-    val rightExpression = translateExpression(relation, right, columnTypes, isOr)
+      isOr: Boolean,
+      segmentSelection: SegmentSelector): Option[Expression] = {
+    val leftExpression = translateExpression(relation, left, columnTypes, isOr, segmentSelection)
+    val rightExpression = translateExpression(relation, right, columnTypes, isOr, segmentSelection)
     if (isOr) {
       if (leftExpression.isDefined && rightExpression.isDefined) {
         (leftExpression ++ rightExpression).reduceOption(new AndExpression(_, _))

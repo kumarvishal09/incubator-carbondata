@@ -25,11 +25,12 @@ import org.apache.spark.sql.execution.datasources.hbase.{HBaseRelation, HBaseTab
 import org.apache.spark.sql.test.util.QueryTest
 import org.scalatest.BeforeAndAfterAll
 import org.apache.spark.sql.functions._
+import org.junit.Ignore
 
 import org.apache.carbondata.core.util.CarbonProperties
 import org.apache.carbondata.hbase.HBaseConstants
 
-
+@Ignore
 class TestHBaseStreaming extends QueryTest with BeforeAndAfterAll {
   var htu: HBaseTestingUtility = _
   var hBaseConfPath:String = _

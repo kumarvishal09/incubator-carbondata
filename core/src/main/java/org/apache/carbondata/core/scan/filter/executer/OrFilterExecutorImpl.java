@@ -72,8 +72,8 @@ public class OrFilterExecutorImpl implements FilterExecutor {
 
   @Override
   public BitSet isScanRequired(MinMaxPruneMetadata minMaxPruneMetadata) {
-    BitSet leftFilters = leftExecuter.isScanRequired(minMaxPruneMetadata);
-    BitSet rightFilters = rightExecuter.isScanRequired(minMaxPruneMetadata);
+    BitSet leftFilters = leftExecutor.isScanRequired(minMaxPruneMetadata);
+    BitSet rightFilters = rightExecutor.isScanRequired(minMaxPruneMetadata);
     leftFilters.or(rightFilters);
     return leftFilters;
   }

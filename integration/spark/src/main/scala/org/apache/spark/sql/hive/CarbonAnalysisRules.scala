@@ -31,7 +31,7 @@ import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, Cast, NamedE
 import org.apache.spark.sql.catalyst.plans.Inner
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
-import org.apache.spark.sql.execution.command.LoadDataCommand
+import org.apache.spark.sql.execution.command.{DDLUtils, LoadDataCommand}
 import org.apache.spark.sql.execution.command.mutation.CarbonProjectForDeleteCommand
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.execution.strategy.{CarbonPlanHelper, DMLHelper}
@@ -39,6 +39,7 @@ import org.apache.spark.sql.util.CarbonException
 import org.apache.spark.util.CarbonReflectionUtils
 
 import org.apache.carbondata.core.constants.CarbonCommonConstants
+import org.apache.carbondata.core.datastore.impl.FileFactory
 import org.apache.carbondata.core.view.MVStatus
 import org.apache.carbondata.view.MVManagerInSpark
 

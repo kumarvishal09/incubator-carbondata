@@ -29,11 +29,11 @@ import java.util.stream.Stream;
 
 import org.apache.carbondata.common.logging.LogServiceFactory;
 import org.apache.carbondata.core.constants.CarbonCommonConstants;
-import org.apache.carbondata.core.datamap.DataMapFilter;
-import org.apache.carbondata.core.datamap.Segment;
 import org.apache.carbondata.core.datastore.block.SegmentProperties;
 import org.apache.carbondata.core.datastore.block.SegmentPropertiesAndSchemaHolder;
 import org.apache.carbondata.core.datastore.impl.FileFactory;
+import org.apache.carbondata.core.index.IndexFilter;
+import org.apache.carbondata.core.index.Segment;
 import org.apache.carbondata.core.metadata.SegmentFileStore;
 import org.apache.carbondata.core.metadata.schema.table.CarbonTable;
 import org.apache.carbondata.core.metadata.schema.table.column.ColumnSchema;
@@ -41,7 +41,7 @@ import org.apache.carbondata.core.readcommitter.ReadCommittedScope;
 import org.apache.carbondata.core.readcommitter.TableStatusReadCommittedScope;
 import org.apache.carbondata.core.scan.expression.Expression;
 import org.apache.carbondata.core.scan.filter.FilterUtil;
-import org.apache.carbondata.core.scan.filter.executer.FilterExecuter;
+import org.apache.carbondata.core.scan.filter.executer.FilterExecutor;
 import org.apache.carbondata.core.scan.filter.executer.MinMaxPruneMetadata;
 import org.apache.carbondata.core.scan.filter.resolver.FilterResolverIntf;
 import org.apache.carbondata.core.segmentmeta.SegmentColumnMetaDataInfo;
@@ -163,12 +163,12 @@ public class SegmentPrunerImpl implements SegmentPruner {
         .addSegmentProperties(carbonTable, columnSchemas, segment.getSegmentNo())
         .getSegmentProperties();
     FilterResolverIntf resolver =
-        new DataMapFilter(segmentProperties, carbonTable, filter).getResolver();
+        new IndexFilter(segmentProperties, carbonTable, filter).getResolver();
     // prepare filter executor using datmapFilter resolver
-    FilterExecuter filterExecuter =
-        FilterUtil.getFilterExecuterTree(resolver, segmentProperties, null, null, false);
+    FilterExecutor filterExecutor =
+        FilterUtil.getFilterExecutorTree(resolver, segmentProperties, null, null, false);
     // check if block has to be pruned based on segment minmax
-    if (filterExecuter
+    if (filterExecutor
         .isScanRequired(new MinMaxPruneMetadata(max, min, minMaxFlag, segment.isCarbonSegment()))
         .isEmpty()) {
       return null;

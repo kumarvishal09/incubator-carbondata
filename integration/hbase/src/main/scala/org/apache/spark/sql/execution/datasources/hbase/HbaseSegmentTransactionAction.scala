@@ -25,16 +25,14 @@ import scala.collection.JavaConverters._
 
 import org.apache.carbondata.common.exceptions.sql.MalformedCarbonCommandException
 import org.apache.carbondata.common.logging.LogServiceFactory
-import org.apache.carbondata.core.constants.CarbonCommonConstants
-import org.apache.carbondata.core.datamap.Segment
 import org.apache.carbondata.core.datastore.impl.FileFactory
+import org.apache.carbondata.core.index.Segment
 import org.apache.carbondata.core.metadata.SegmentFileStore
 import org.apache.carbondata.core.metadata.schema.table.CarbonTable
 import org.apache.carbondata.core.mutate.CarbonUpdateUtil
-import org.apache.carbondata.core.segmentmeta.{SegmentColumnMetaDataInfo, SegmentMetaDataInfo}
 import org.apache.carbondata.core.statusmanager.{FileFormat, LoadMetadataDetails, SegmentStatus, SegmentStatusManager}
 import org.apache.carbondata.core.transaction.TransactionAction
-import org.apache.carbondata.core.util.{ByteUtil, CarbonUtil}
+import org.apache.carbondata.core.util.{CarbonUtil}
 import org.apache.carbondata.core.util.path.CarbonTablePath
 import org.apache.carbondata.hbase.HBaseUtil
 import org.apache.carbondata.processing.loading.model.{CarbonDataLoadSchema, CarbonLoadModel}
@@ -117,7 +115,7 @@ class HbaseSegmentTransactionAction(carbonTable: CarbonTable,
       .filter(det => det.getFileFormat.toString.equals("hbase") &&
                      det.getSegmentStatus == SegmentStatus.SUCCESS).head
     hbaseCurrentSuccessSegment.setSegmentStatus(SegmentStatus.COMPACTED)
-    hbaseCurrentSuccessSegment.setModificationOrdeletionTimesStamp(model.getFactTimeStamp)
+    hbaseCurrentSuccessSegment.setModificationOrDeletionTimestamp(model.getFactTimeStamp)
     hbaseCurrentSuccessSegment.setMergedLoadName(newLoadMetaEntry.getLoadName)
 
     val success = if (writeSegment) {
@@ -129,7 +127,10 @@ class HbaseSegmentTransactionAction(carbonTable: CarbonTable,
       SegmentStatusManager.writeLoadDetailsIntoFile(CarbonTablePath.getTableStatusFilePath(
         carbonTable.getAbsoluteTableIdentifier.getTablePath),
         allLoadMetadata)
-      LOGGER.info(s"Added new Hbase segment for table ${carbonTable.getTableUniqueName}: segmenetid : ${segment.getSegmentNo}")
+      LOGGER.info(s"Added new Hbase segment for table ${
+        carbonTable
+          .getTableUniqueName
+      }: segmenetid : ${ segment.getSegmentNo }")
       true
     } else {
       false
@@ -139,7 +140,7 @@ class HbaseSegmentTransactionAction(carbonTable: CarbonTable,
       CarbonLoaderUtil.updateTableStatusForFailure(model, "uniqueTableStatusId")
       LOGGER.info("********starting clean up**********")
       // delete segment is applicable for transactional table
-      CarbonLoaderUtil.deleteSegment(model, model.getSegmentId.toInt)
+      CarbonLoaderUtil.deleteSegmentForFailure(model, model.getSegmentId.toInt)
       // delete corresponding segment file from metadata
       val segmentFile = CarbonTablePath.getSegmentFilesLocation(carbonTable.getTablePath) +
                         File.separator + segment.getSegmentFileName

@@ -44,7 +44,6 @@ import org.apache.carbondata.core.locks.ICarbonLock;
 import org.apache.carbondata.core.metadata.AbsoluteTableIdentifier;
 import org.apache.carbondata.core.metadata.SegmentFileStore;
 import org.apache.carbondata.core.metadata.schema.table.CarbonTable;
-import org.apache.carbondata.core.metadata.schema.table.DataMapSchema;
 import org.apache.carbondata.core.mutate.CarbonUpdateUtil;
 import org.apache.carbondata.core.statusmanager.LoadMetadataDetails;
 import org.apache.carbondata.core.statusmanager.SegmentStatus;
@@ -95,6 +94,13 @@ public final class CarbonLoaderUtil {
    */
   public static void deleteSegmentForFailure(CarbonLoadModel loadModel) {
     int currentLoad = Integer.parseInt(loadModel.getSegmentId());
+    deleteSegmentForFailure(loadModel, currentLoad);
+  }
+
+  /**
+   * delete segment after data loading failure
+   */
+  public static void deleteSegmentForFailure(CarbonLoadModel loadModel, int currentLoad) {
     String segmentPath = CarbonTablePath.getSegmentPath(
         loadModel.getTablePath(), currentLoad + "");
     try {
@@ -217,36 +223,18 @@ public final class CarbonLoaderUtil {
     // If the updated data should be added as new segment then update the segment information
     if (loadAsNewSegment) {
       done = done && CarbonUpdateUtil.updateTableMetadataStatus(
-          carbonLoadModel.getLoadMetadataDetails().stream().filter(
-              LoadMetadataDetails::isCarbonFormat).map(l -> new Segment(
-              l.getMergedLoadName() == null ? l.getLoadName() : l.getMergedLoadName(),
+          carbonLoadModel.getLoadMetadataDetails().stream().filter(LoadMetadataDetails::isCarbonFormat).map(
+              l -> new Segment(
+                  l.getMergedLoadName() == null ? l.getLoadName() : l.getMergedLoadName(),
                   l.getSegmentFile())).collect(Collectors.toSet()),
           carbonLoadModel.getCarbonDataLoadSchema().getCarbonTable(),
           updateTimestamp + "",
           true,
+          true,
           segmentsToBeDeleted);
     }
     done = done && CarbonLoaderUtil.recordNewLoadMetadata(metadataDetails, carbonLoadModel, false,
-        overwriteTable, uuid);
-    if (!done) {
-      String errorMessage = "Dataload failed due to failure in table status updation for" +
-          " ${carbonLoadModel.getTableName}";
-      LOGGER.error(errorMessage);
-      throw new Exception(errorMessage);
-    } else {
-      DataMapStatusManager.disableAllLazyDataMaps(
-          carbonLoadModel.getCarbonDataLoadSchema().getCarbonTable());
-      if (overwriteTable) {
-        List<DataMapSchema> allDataMapSchemas = DataMapStoreManager.getInstance()
-            .getDataMapSchemasOfTable(carbonLoadModel.getCarbonDataLoadSchema().getCarbonTable())
-            .stream().filter(
-                dataMapSchema -> null != dataMapSchema.getRelationIdentifier() && !dataMapSchema
-                    .isIndexDataMap()).collect(Collectors.toList());
-        if (!allDataMapSchemas.isEmpty()) {
-          DataMapStatusManager.truncateDataMap(allDataMapSchemas);
-        }
-      }
-    }
+        overwriteTable, uuid, false);
     return done;
   }
 

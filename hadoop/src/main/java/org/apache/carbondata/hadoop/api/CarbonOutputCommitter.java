@@ -39,6 +39,8 @@ import org.apache.carbondata.core.mutate.CarbonUpdateUtil;
 import org.apache.carbondata.core.statusmanager.LoadMetadataDetails;
 import org.apache.carbondata.core.statusmanager.SegmentStatus;
 import org.apache.carbondata.core.statusmanager.SegmentStatusManager;
+import org.apache.carbondata.core.transaction.TransactionActionType;
+import org.apache.carbondata.core.transaction.TransactionManager;
 import org.apache.carbondata.core.util.CarbonProperties;
 import org.apache.carbondata.core.util.CarbonSessionInfo;
 import org.apache.carbondata.core.util.ObjectSerializationUtil;
@@ -46,6 +48,7 @@ import org.apache.carbondata.core.util.ThreadLocalSessionInfo;
 import org.apache.carbondata.core.util.path.CarbonTablePath;
 import org.apache.carbondata.events.OperationContext;
 import org.apache.carbondata.events.OperationListenerBus;
+import org.apache.carbondata.hadoop.PartitionTransactionAction;
 import org.apache.carbondata.processing.loading.events.LoadEvents;
 import org.apache.carbondata.processing.loading.model.CarbonLoadModel;
 import org.apache.carbondata.processing.util.CarbonLoaderUtil;
@@ -120,10 +123,16 @@ public class CarbonOutputCommitter extends FileOutputCommitter {
     boolean overwriteSet = CarbonTableOutputFormat.isOverwriteSet(context.getConfiguration());
     CarbonLoadModel loadModel = CarbonTableOutputFormat.getLoadModel(context.getConfiguration());
     if (loadModel.getCarbonDataLoadSchema().getCarbonTable().isHivePartitionTable()) {
+      String transactionId = context.getConfiguration().get("carbon.transactionId");
       try {
         commitJobForPartition(context, overwriteSet, loadModel, partitionPath);
       } catch (Exception e) {
         CarbonLoaderUtil.updateTableStatusForFailure(loadModel);
+        if (null != transactionId) {
+          TransactionManager.getInstance().recordTransactionAction(transactionId,
+              new PartitionTransactionAction(loadModel, loadModel.getCurrentLoadMetadataDetail()),
+              TransactionActionType.COMMIT_SCOPE);
+        }
         LOGGER.error("commit job failed", e);
         throw new IOException(e.getMessage());
       } finally {
@@ -189,6 +198,8 @@ public class CarbonOutputCommitter extends FileOutputCommitter {
             .addIndexSizeIntoMetaEntry(newMetaEntry, loadModel.getSegmentId(), carbonTable);
       }
       String uniqueId = null;
+      List<Segment> segToUpdated = new ArrayList<>();
+      List<Segment> segToDeleted = new ArrayList<>();
       if (overwriteSet) {
         if (!loadModel.isCarbonTransactionalTable()) {
           CarbonLoaderUtil.deleteNonTransactionalTableForInsertOverwrite(loadModel);
@@ -196,12 +207,25 @@ public class CarbonOutputCommitter extends FileOutputCommitter {
           if (segmentSize == 0) {
             newMetaEntry.setSegmentStatus(SegmentStatus.MARKED_FOR_DELETE);
           }
-          uniqueId = overwritePartitions(loadModel, newMetaEntry, uuid);
+          uniqueId = String.valueOf(System.currentTimeMillis());
+          List<List<String>> segmentsToBeUpdated =
+              overwritePartitions(loadModel, newMetaEntry, uuid, uniqueId);
+          if (null != segmentsToBeUpdated) {
+            segToUpdated = Segment.toSegmentList(segmentsToBeUpdated.get(0), null);
+            segToDeleted = Segment.toSegmentList(segmentsToBeUpdated.get(1), null);
+          }
         }
-      } else {
-        CarbonLoaderUtil.recordNewLoadMetadata(newMetaEntry, loadModel, false, false, uuid, false);
       }
-      commitJobFinal(context, loadModel, operationContext, carbonTable, uniqueId);
+      newMetaEntry.setLoadName(String.valueOf(loadModel.getSegmentId()));
+      PartitionTransactionAction partitionTransactionAction =
+          new PartitionTransactionAction(loadModel, newMetaEntry, uuid, operationContext,
+              context.getConfiguration(), uniqueId, segToUpdated, segToDeleted, segmentLock,
+              false, overwriteSet);
+      try {
+        partitionTransactionAction.commit();
+      } catch (Exception e) {
+        throw new IOException(e);
+      }
     } else {
       CarbonLoaderUtil.updateTableStatusForFailure(loadModel);
     }
@@ -210,41 +234,12 @@ public class CarbonOutputCommitter extends FileOutputCommitter {
     }
   }
 
-  private void commitJobFinal(JobContext context, CarbonLoadModel loadModel,
-      OperationContext operationContext, CarbonTable carbonTable, String uniqueId)
-      throws IOException {
-    if (operationContext != null) {
-      LoadEvents.LoadTablePostStatusUpdateEvent postStatusUpdateEvent =
-          new LoadEvents.LoadTablePostStatusUpdateEvent(loadModel);
-      try {
-        OperationListenerBus.getInstance()
-            .fireEvent(postStatusUpdateEvent, operationContext);
-      } catch (Exception e) {
-        throw new IOException(e);
-      }
-    }
-    String updateTime =
-        context.getConfiguration().get(CarbonTableOutputFormat.UPDATE_TIMESTAMP, uniqueId);
-    String segmentsToBeDeleted =
-        context.getConfiguration().get(CarbonTableOutputFormat.SEGMENTS_TO_BE_DELETED, "");
-    List<Segment> segmentDeleteList = Collections.emptyList();
-    if (!segmentsToBeDeleted.trim().isEmpty()) {
-      segmentDeleteList = Segment.toSegmentList(segmentsToBeDeleted.split(","), null);
-    }
-    boolean isUpdateStatusFileUpdateRequired =
-        (context.getConfiguration().get(CarbonTableOutputFormat.UPDATE_TIMESTAMP) != null);
-    if (updateTime != null) {
-      CarbonUpdateUtil.updateTableMetadataStatus(Collections.singleton(loadModel.getSegment()),
-          carbonTable, updateTime, true,
-          isUpdateStatusFileUpdateRequired, segmentDeleteList);
-    }
-  }
-
   /**
    * re-factory commitJob flow for partition table
    */
   private void commitJobForPartition(JobContext context, boolean overwriteSet,
-      CarbonLoadModel loadModel, String partitionPath) throws IOException {
+      CarbonLoadModel loadModel, String partitionPath) throws Exception {
+    String transactionId = context.getConfiguration().get("carbon.transactionId");
     String size = context.getConfiguration().get("carbon.datasize", "");
     String indexSize = context.getConfiguration().get("carbon.indexsize", "");
     if (size.equalsIgnoreCase("0") || indexSize.equalsIgnoreCase("0")) {
@@ -302,24 +297,42 @@ public class CarbonOutputCommitter extends FileOutputCommitter {
       newMetaEntry.setDataSize(size);
     }
     String uniqueId = null;
+    List<Segment> segToUpdated = new ArrayList<>();
+    List<Segment> segToDeleted = new ArrayList<>();
     if (overwriteSet) {
-      uniqueId = overwritePartitions(loadModel, newMetaEntry, uuid);
-    } else {
-      CarbonLoaderUtil.recordNewLoadMetadata(newMetaEntry, loadModel, false, false, uuid, false);
+      uniqueId = String.valueOf(System.currentTimeMillis());
+      List<List<String>> segmentsToBeUpdated =
+          overwritePartitions(loadModel, newMetaEntry, uuid, uniqueId);
+      if (null != segmentsToBeUpdated) {
+        segToUpdated = Segment.toSegmentList(segmentsToBeUpdated.get(0), null);
+        segToDeleted = Segment.toSegmentList(segmentsToBeUpdated.get(1), null);
+      }
     }
     if (operationContext != null) {
       operationContext
           .setProperty(CarbonCommonConstants.CURRENT_SEGMENTFILE, newMetaEntry.getSegmentFile());
     }
-    commitJobFinal(context, loadModel, operationContext, carbonTable, uniqueId);
+    newMetaEntry.setLoadName(String.valueOf(loadModel.getSegmentId()));
+    PartitionTransactionAction partitionTransactionAction =
+        new PartitionTransactionAction(loadModel, newMetaEntry, uuid, operationContext,
+            context.getConfiguration(), uniqueId, segToUpdated, segToDeleted, segmentLock,
+            null != transactionId, overwriteSet);
+    if (null != transactionId) {
+      TransactionManager.getInstance()
+          .recordTransactionAction(transactionId, partitionTransactionAction,
+              TransactionActionType.COMMIT_SCOPE);
+    } else {
+      partitionTransactionAction.commit();
+    }
   }
 
   /**
    * Overwrite the partitions in case of overwrite query. It just updates the partition map files
    * of all segment files.
    */
-  private String overwritePartitions(CarbonLoadModel loadModel, LoadMetadataDetails newMetaEntry,
-      String uuid) throws IOException {
+  //TODO check if uuid is used in new code or not
+  private List<List<String>> overwritePartitions(CarbonLoadModel loadModel, LoadMetadataDetails newMetaEntry,
+      String uuid, String uniqueId) throws IOException {
     CarbonTable table = loadModel.getCarbonDataLoadSchema().getCarbonTable();
     SegmentFileStore fileStore = new SegmentFileStore(loadModel.getTablePath(),
         loadModel.getSegmentId() + "_" + loadModel.getFactTimeStamp()
@@ -330,7 +343,6 @@ public class CarbonOutputCommitter extends FileOutputCommitter {
       List<Segment> validSegments =
           new SegmentStatusManager(table.getAbsoluteTableIdentifier())
               .getValidAndInvalidSegments(table.isMV()).getValidSegments();
-      String uniqueId = String.valueOf(System.currentTimeMillis());
       List<String> toBeUpdatedSegments = new ArrayList<>();
       List<String> toBeDeletedSegments = new ArrayList<>();
       // First drop the partitions from partition mapper files of each segment
@@ -339,11 +351,15 @@ public class CarbonOutputCommitter extends FileOutputCommitter {
             segment, partitionSpecs, uniqueId, toBeDeletedSegments, toBeUpdatedSegments);
       }
       newMetaEntry.setUpdateStatusFileName(uniqueId);
+      //TODO PartitionTransactionAction- CarbonLoaderUtil.recordNewLoadMetadata update with this code
       // Commit the removed partitions in carbon store.
-      CarbonLoaderUtil.recordNewLoadMetadata(newMetaEntry, loadModel, false, false, uuid,
-          Segment.toSegmentList(toBeDeletedSegments, null),
-          Segment.toSegmentList(toBeUpdatedSegments, null), false);
-      return uniqueId;
+//      CarbonLoaderUtil.recordNewLoadMetadata(newMetaEntry, loadModel, false, false, uuid,
+//          Segment.toSegmentList(toBeDeletedSegments, null),
+//          Segment.toSegmentList(toBeUpdatedSegments, null), false);
+      List<List<String>> segmentsDetails = new ArrayList<>();
+      segmentsDetails.add(toBeUpdatedSegments);
+      segmentsDetails.add(toBeDeletedSegments);
+      return segmentsDetails;
     }
     return null;
   }
@@ -365,41 +381,8 @@ public class CarbonOutputCommitter extends FileOutputCommitter {
   public void abortJob(JobContext context, JobStatus.State state) throws IOException {
     try {
       super.abortJob(context, state);
-      CarbonLoadModel loadModel = CarbonTableOutputFormat.getLoadModel(context.getConfiguration());
-      CarbonLoaderUtil.updateTableStatusForFailure(loadModel);
-      String segmentFileName = loadModel.getSegmentId() + "_" + loadModel.getFactTimeStamp();
-      LoadMetadataDetails metadataDetail = loadModel.getCurrentLoadMetadataDetail();
-      if (metadataDetail != null) {
-        // In case the segment file is already created for this job then just link it so that it
-        // will be used while cleaning.
-        if (!metadataDetail.getSegmentStatus().equals(SegmentStatus.SUCCESS)) {
-          String readPath = CarbonTablePath.getSegmentFilesLocation(loadModel.getTablePath())
-              + CarbonCommonConstants.FILE_SEPARATOR + segmentFileName
-              + CarbonTablePath.SEGMENT_EXT;
-          if (FileFactory.getCarbonFile(readPath).exists()) {
-            metadataDetail.setSegmentFile(segmentFileName + CarbonTablePath.SEGMENT_EXT);
-          }
-        }
-      }
-      // Clean the temp files
-      CarbonFile segTmpFolder = FileFactory.getCarbonFile(
-          CarbonTablePath.getSegmentFilesLocation(loadModel.getTablePath())
-              + CarbonCommonConstants.FILE_SEPARATOR + segmentFileName + ".tmp");
-      // delete temp segment folder
-      if (segTmpFolder.exists()) {
-        FileFactory.deleteAllCarbonFilesOfDir(segTmpFolder);
-      }
-      CarbonFile segmentFilePath = FileFactory.getCarbonFile(
-          CarbonTablePath.getSegmentFilesLocation(loadModel.getTablePath())
-              + CarbonCommonConstants.FILE_SEPARATOR + segmentFileName
-              + CarbonTablePath.SEGMENT_EXT);
-      // Delete the temp data folders of this job if exists
-      if (segmentFilePath.exists()) {
-        SegmentFileStore fileStore = new SegmentFileStore(loadModel.getTablePath(),
-            segmentFileName + CarbonTablePath.SEGMENT_EXT);
-        SegmentFileStore.removeTempFolder(fileStore.getLocationMap(), segmentFileName + ".tmp",
-            loadModel.getTablePath());
-      }
+      CarbonLoaderUtil
+          .runCleanupForPartition(CarbonTableOutputFormat.getLoadModel(context.getConfiguration()));
       LOGGER.error("Loading failed with job status : " + state);
     } finally {
       if (segmentLock != null) {

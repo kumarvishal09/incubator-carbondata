@@ -17,7 +17,7 @@
 
 package org.apache.carbondata.core.transaction;
 
-import org.apache.carbondata.core.datamap.Segment;
+import org.apache.carbondata.core.index.Segment;
 
 public interface TransactionAction {
 

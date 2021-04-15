@@ -33,6 +33,7 @@ import org.apache.hadoop.hdfs.DistributedFileSystem;
 import org.apache.hadoop.util.Progressable;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
+import org.junit.Ignore;
 import org.junit.Test;
 
 import java.io.File;
@@ -152,6 +153,7 @@ public class AlluxioCarbonFileTest {
         assertTrue(alluxioCarbonFile.listFiles().length == 0);
     }
 
+    @Ignore
     @Test
     public void testListDirectory() {
         alluxioCarbonFile = new AlluxioCarbonFile(fileStatus);
@@ -205,6 +207,7 @@ public class AlluxioCarbonFileTest {
         alluxioCarbonFile.listFiles();
     }
 
+    @Ignore
     @Test
     public void testListFilesWithCarbonFilter() {
         CarbonFileFilter carbonFileFilter = new CarbonFileFilter() {

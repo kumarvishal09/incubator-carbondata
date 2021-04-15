@@ -28,7 +28,7 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
-import org.apache.carbondata.core.datamap.Segment;
+import org.apache.carbondata.core.index.Segment;
 import org.apache.carbondata.core.transaction.TransactionAction;
 import org.apache.carbondata.core.transaction.TransactionActionType;
 import org.apache.carbondata.core.transaction.TransactionHandler;

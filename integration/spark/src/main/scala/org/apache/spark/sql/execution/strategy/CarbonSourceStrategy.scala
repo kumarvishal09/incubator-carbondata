@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution.strategy
 
+import scala.collection.JavaConverters._
 import scala.collection.mutable
 
 import org.apache.log4j.Logger
@@ -34,13 +35,14 @@ import org.apache.spark.sql.types._
 import org.apache.carbondata.common.exceptions.sql.MalformedCarbonCommandException
 import org.apache.carbondata.common.logging.LogServiceFactory
 import org.apache.carbondata.core.constants.CarbonCommonConstants
-import org.apache.carbondata.core.datastore.impl.FileFactory
-import org.apache.carbondata.core.readcommitter.TableStatusReadCommittedScope
+import org.apache.carbondata.core.indexstore.{PrunedSegmentInfo, SegmentPrunerFactory}
 import org.apache.carbondata.core.scan.expression.{Expression => CarbonFilter}
+import org.apache.carbondata.core.scan.expression.logical.{AndExpression => CarbonAndExpression}
+import org.apache.carbondata.core.statusmanager.FileFormat
 import org.apache.carbondata.core.util.CarbonProperties
 import org.apache.carbondata.geo.{InPolygonListUDF, InPolygonRangeListUDF, InPolygonUDF, InPolylineListUDF}
 import org.apache.carbondata.hadoop.CarbonProjection
-import org.apache.carbondata.index.{TextMatchMaxDocUDF, TextMatchUDF}
+import org.apache.carbondata.index.{SegmentSelector, TextMatchMaxDocUDF, TextMatchUDF}
 
 private[sql] object CarbonSourceStrategy extends SparkStrategy {
   val PUSHED_FILTERS = "PushedFilters"
@@ -53,12 +55,12 @@ private[sql] object CarbonSourceStrategy extends SparkStrategy {
     transformedPlan match {
       case GlobalLimit(IntegerLiteral(limit), LocalLimit(IntegerLiteral(limitValue),
       _@PhysicalOperation(projects, filters, l: LogicalRelation))) if isCarbonRelation(l) =>
-        GlobalLimitExec(limit, LocalLimitExec(limitValue, pruneFilterProject(l,
+        GlobalLimitExec(limit, LocalLimitExec(limitValue, pruneFilterProject(plan, l,
           projects.filterNot(_.name.equalsIgnoreCase(CarbonCommonConstants.POSITION_ID)),
           filters))) :: Nil
       case PhysicalOperation(projects, filters, l: LogicalRelation) if isCarbonRelation(l) =>
         try {
-          pruneFilterProject(l, projects, filters) :: Nil
+          pruneFilterProject(plan, l, projects, filters) :: Nil
         } catch {
           case _: CarbonPhysicalPlanException => Nil
         }
@@ -90,7 +92,7 @@ private[sql] object CarbonSourceStrategy extends SparkStrategy {
    * Converts to physical RDD of carbon after pushing down applicable filters.
    * @return
    */
-  private def pruneFilterProject(
+  private def pruneFilterProject(plan: LogicalPlan,
       relation: LogicalRelation,
       rawProjects: Seq[NamedExpression],
       allPredicates: Seq[Expression]): CodegenSupport = {
@@ -112,12 +114,39 @@ private[sql] object CarbonSourceStrategy extends SparkStrategy {
         case a: AttributeReference => relation.attributeMap(a) // Match original case of attributes.
       }
     }
-
+    val segmentSelector = new SegmentSelector
     val (unhandledPredicates, handledPredicates, pushedFilters) =
-      selectFilters(table, relationPredicates)
+      selectFilters(table, relationPredicates, segmentSelector)
 
+    val filterExpression: Option[CarbonFilter] = pushedFilters.reduceOption(
+      new CarbonAndExpression(_, _))
     // A set of column attributes that are only referenced by pushed down filters.  We can eliminate
     // them from requested columns.
+    var inputSegments = MixedFormatHandler.getSegmentsToAccess(table.identifier)
+    if (null != segmentSelector.getIncludeSegmentIdString) {
+      inputSegments = inputSegments ++ segmentSelector.getIncludeSegmentIdString.split(",")
+    }
+    var excludeSegments: Seq[String] = Seq.empty
+    if (null != segmentSelector.getExcludeSegmentIdString) {
+      excludeSegments = excludeSegments ++ segmentSelector.getExcludeSegmentIdString.split(",")
+    }
+    val carbonFilterExp = if (filterExpression.isDefined) {
+      filterExpression.get
+    } else {
+      null
+    }
+    val validPrunedSegmentInfo = SegmentPrunerFactory.INSTANCE.getSegmentPruner(table.carbonTable)
+      .pruneSegment(table.carbonTable,
+        carbonFilterExp, inputSegments.toArray, excludeSegments.toArray).asScala.toList
+    val segmentNameList = validPrunedSegmentInfo.map(seg => seg.getSegment.getSegmentNo)
+    LOGGER.info("Final selected segments : " + segmentNameList)
+    val carbonSegmentsToAccess = validPrunedSegmentInfo.filter(p => p
+      .getSegment
+      .getLoadMetadataDetails
+      .isCarbonFormat).map(carbonSeg => carbonSeg.getSegment).toArray
+    val externalSegments: Map[FileFormat, List[PrunedSegmentInfo]] =
+      validPrunedSegmentInfo.filter(p => !p.getSegment.isCarbonSegment)
+      .groupBy(_.getSegment.getLoadMetadataDetails.getFileFormat)
     val handledSet = {
       val handledPredicates = allPredicates.filterNot(unhandledPredicates.contains)
       val unhandledSet = AttributeSet(unhandledPredicates.flatMap(_.references))
@@ -131,14 +160,14 @@ private[sql] object CarbonSourceStrategy extends SparkStrategy {
     // Combines all Catalyst filter `Expression`s that are either not convertible to data source
     // `Filter`s or cannot be handled by `relation`.
     val filterCondition = unhandledPredicates.reduceLeftOption(expressions.And)
+    val extraRDD = MixedFormatHandler.extraRDD(plan,
+      relation,
+      rawProjects,
+      allPredicates,
+      externalSegments)
 
-    val readCommittedScope =
-      new TableStatusReadCommittedScope(table.identifier, FileFactory.getConfiguration)
-    val extraSegments = MixedFormatHandler.extraSegments(table.identifier, readCommittedScope)
-    val extraRDD = MixedFormatHandler.extraRDD(relation, rawProjects, allPredicates,
-      readCommittedScope, table.identifier, extraSegments)
     val vectorPushRowFilters =
-      vectorPushRowFiltersEnabled(relationPredicates, extraSegments.nonEmpty)
+      vectorPushRowFiltersEnabled(relationPredicates, externalSegments.nonEmpty)
     var directScanSupport = !vectorPushRowFilters
     val (updatedProjects, output, requiredColumns) = if (projects.map(_.toAttribute) == projects &&
       projectSet.size == projects.size && filterSet.subsetOf(projectSet)) {
@@ -157,17 +186,18 @@ private[sql] object CarbonSourceStrategy extends SparkStrategy {
       output,
       partitionsFilter,
       handledPredicates,
-      readCommittedScope,
       getCarbonProjection(relationPredicates, requiredColumns, projects),
       pushedFilters,
       directScanSupport,
       extraRDD,
-      Some(TableIdentifier(table.identifier.getTableName, Option(table.identifier.getDatabaseName)))
+      Some(TableIdentifier(table.identifier.getTableName,
+        Option(table.identifier.getDatabaseName))),
+      carbonSegmentsToAccess
     )
     // filter
     val filterOption = if (directScanSupport && scan.supportsBatch) {
       allPredicates.reduceLeftOption(expressions.And)
-    } else if (extraSegments.nonEmpty) {
+    } else if (externalSegments.nonEmpty) {
       allPredicates.reduceLeftOption(expressions.And)
     } else {
       filterCondition
@@ -372,7 +402,8 @@ private[sql] object CarbonSourceStrategy extends SparkStrategy {
   }
 
   protected def selectFilters(relation: CarbonDatasourceHadoopRelation,
-      predicates: Seq[Expression]): (Seq[Expression], Seq[Expression], Seq[CarbonFilter]) = {
+      predicates: Seq[Expression],
+      segmentSelection: SegmentSelector): (Seq[Expression], Seq[Expression], Seq[CarbonFilter]) = {
     // In case of ComplexType dataTypes no filters should be pushed down. IsNotNull is being
     // explicitly added by spark and pushed. That also has to be handled and pushed back to
     // Spark for handling.
@@ -406,7 +437,11 @@ private[sql] object CarbonSourceStrategy extends SparkStrategy {
             "Specify all search filters for Lucene within a single text_match UDF")
         }
 
-        val filter = CarbonFilters.translateExpression(relation, predicate, dataTypeOf)
+        val filter = CarbonFilters.translateExpression(relation,
+          predicate,
+          dataTypeOf,
+          false,
+          segmentSelection)
         if (filter.isDefined) {
           Some(predicate, filter.get)
         } else {

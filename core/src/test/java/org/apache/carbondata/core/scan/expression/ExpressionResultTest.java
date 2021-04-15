@@ -459,9 +459,9 @@ public class ExpressionResultTest {
   }
 
   @Test public void compareToForTimestamp() {
-    ExpressionResult obj = new ExpressionResult(DataTypes.TIMESTAMP, "2016-11-07 10:15:09");
+    ExpressionResult obj = new ExpressionResult(DataTypes.TIMESTAMP, "2016-11-07 10:15:09.0");
     ExpressionResult expressionResult =
-        new ExpressionResult(DataTypes.TIMESTAMP, "2016-11-07 10:15:09");
+        new ExpressionResult(DataTypes.TIMESTAMP, "2016-11-07 10:15:09.0");
     int actualValue = expressionResult.compareTo(obj);
     int expectedValue = 0;
     assertEquals(expectedValue, actualValue);

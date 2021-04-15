@@ -21,11 +21,9 @@ import java.util
 import scala.collection.JavaConverters._
 
 import org.apache.hadoop.fs.Path
-
-import org.apache.carbondata.core.statusmanager.{LoadMetadataDetails, FileFormat => FileFormatName}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.SparkSqlAdapter
-import org.apache.spark.sql.catalyst.{InternalRow, expressions}
+import org.apache.spark.sql.catalyst.{expressions, InternalRow}
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, AttributeSet, Expression, ExpressionSet, NamedExpression}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.{FilterExec, ProjectExec}
@@ -36,6 +34,7 @@ import org.apache.spark.sql.types.StructType
 import org.apache.carbondata.common.logging.LogServiceFactory
 import org.apache.carbondata.core.constants.CarbonCommonConstants
 import org.apache.carbondata.core.indexstore.PrunedSegmentInfo
+import org.apache.carbondata.core.statusmanager.{ FileFormat => FileFormatName, LoadMetadataDetails}
 
 
 class GenericFormatHandler extends ExternalFormatHandler {
@@ -72,17 +71,17 @@ class GenericFormatHandler extends ExternalFormatHandler {
       }
     }
     val fileFormat = getFileFormat(format, supportBatch)
-    getRDD(l, projects, filters, paths, fileFormat);
+    getRDD(l, projects, filters, fileFormat, paths)
   }
 
   /**
-   * Generates the RDD using the spark fileformat.
+   * Generates the RDD using the spark file format.
    */
   private def getRDD(l: LogicalRelation,
       projects: Seq[NamedExpression],
       filters: Seq[Expression],
-      paths: Seq[Path],
-      fileFormat: FileFormat): (RDD[InternalRow], Boolean) = {
+      fileFormat: FileFormat,
+      paths: Seq[Path]): (RDD[InternalRow], Boolean) = {
     val sparkSession = l.relation.sqlContext.sparkSession
     val fsRelation = l.catalogTable match {
       case Some(catalogTable) =>
@@ -90,8 +89,7 @@ class GenericFormatHandler extends ExternalFormatHandler {
           new InMemoryFileIndex(sparkSession, paths, catalogTable.storage.properties, None)
         // exclude the partition in data schema
         val dataSchema = catalogTable.schema.filterNot { column =>
-          catalogTable.partitionColumnNames.contains(column.name)
-        }
+          catalogTable.partitionColumnNames.contains(column.name)}
         HadoopFsRelation(
           fileIndex,
           catalogTable.partitionSchema,

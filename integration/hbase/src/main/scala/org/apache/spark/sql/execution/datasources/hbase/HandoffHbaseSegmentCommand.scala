@@ -21,34 +21,31 @@ import java.util.UUID
 
 import scala.collection.JavaConverters._
 
+import org.apache.spark.sql._
+import org.apache.spark.sql.execution.command.{Checker, DataCommand, ExecutionErrors, UpdateTableModel}
 import org.apache.spark.sql.execution.command.management.CarbonInsertIntoWithDf
 import org.apache.spark.sql.execution.command.mutation.{DeleteExecution, HorizontalCompaction}
 import org.apache.spark.sql.execution.command.mutation.merge.{CarbonMergeDataSetException, MutationActionFactory}
-import org.apache.spark.sql.execution.command.{Checker, DataCommand, ExecutionErrors, UpdateTableModel}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.hive.CarbonRelation
-import org.apache.spark.sql._
-import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, GenericRow}
-import org.apache.spark.sql.execution.LogicalRDD
 
 import org.apache.carbondata.common.exceptions.sql.MalformedCarbonCommandException
 import org.apache.carbondata.common.logging.LogServiceFactory
 import org.apache.carbondata.core.constants.CarbonCommonConstants
-import org.apache.carbondata.core.datamap.Segment
 import org.apache.carbondata.core.exception.ConcurrentOperationException
 import org.apache.carbondata.core.extrenalschema.ExternalSchema
+import org.apache.carbondata.core.index.Segment
 import org.apache.carbondata.core.metadata.SegmentFileStore
 import org.apache.carbondata.core.metadata.schema.table.CarbonTable
 import org.apache.carbondata.core.mutate.CarbonUpdateUtil
 import org.apache.carbondata.core.statusmanager.{LoadMetadataDetails, SegmentStatus, SegmentStatusManager}
 import org.apache.carbondata.core.transaction.{TransactionActionType, TransactionManager}
-import org.apache.carbondata.core.util.path.CarbonTablePath
 import org.apache.carbondata.core.util.{ByteUtil, CarbonProperties, CarbonUtil}
-import org.apache.carbondata.processing.loading.FailureCauses
-import org.apache.carbondata.tranaction.SessionTransactionManager
+import org.apache.carbondata.core.util.path.CarbonTablePath
 import org.apache.carbondata.hbase.HBaseConstants._
 import org.apache.carbondata.hbase.HBaseUtil._
+import org.apache.carbondata.processing.loading.FailureCauses
+import org.apache.carbondata.tranaction.SessionTransactionManager
 
 case class HandoffHbaseSegmentCommand(
     databaseNameOp: Option[String],
@@ -238,7 +235,10 @@ case class HandoffHbaseSegmentCommand(
       } else {
         uWithTuples = tableDF.withColumn(CarbonCommonConstants.CARBON_IMPLICIT_COLUMN_TUPLEID,
           expr("getTupleId()")).join(uDf.select(joinColumns.get.map(col): _*),
-          joinColumns.get.map(c => tableDF.col(c).equalTo(uDf.col(c))).reduce[Column]((l, r) => l.and(r))).select(col(CarbonCommonConstants.CARBON_IMPLICIT_COLUMN_TUPLEID))
+          joinColumns.get
+            .map(c => tableDF.col(c).equalTo(uDf.col(c)))
+            .reduce[Column]((l, r) => l.and(r)))
+          .select(col(CarbonCommonConstants.CARBON_IMPLICIT_COLUMN_TUPLEID))
       }
       uWithTuples.cache()
     }
@@ -279,11 +279,11 @@ case class HandoffHbaseSegmentCommand(
       isOverwriteTable = false,
       dataFrame = iDf.union(uDf),
       updateModel = Some(new UpdateTableModel(true, timestamp,
-        executorErrors, Array.empty[Segment], true)),
+        executorErrors, Array.empty[Segment], Option.empty, true)),
       tableInfoOp = Some(carbonTable.getTableInfo)).process(sparkSession)
     if (!CarbonUpdateUtil.updateSegmentStatus(tuple._1.asScala.asJava,
       carbonTable,
-      timestamp.toString, false)) {
+      timestamp.toString, false, false)) {
       LOGGER.error("writing of update status file failed")
       throw new CarbonMergeDataSetException("writing of update status file failed")
     }

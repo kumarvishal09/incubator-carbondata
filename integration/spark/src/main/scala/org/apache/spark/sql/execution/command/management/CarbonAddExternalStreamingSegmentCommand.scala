@@ -24,17 +24,17 @@ import java.util.Locale
 import scala.collection.JavaConverters._
 
 import org.apache.hadoop.fs.FileStatus
+import org.apache.spark.sql.{CarbonEnv, Row, SparkSession}
 import org.apache.spark.sql.execution.command.{Checker, MetadataCommand}
 import org.apache.spark.sql.hive.CarbonRelation
-import org.apache.spark.sql.{CarbonEnv, Row, SparkSession}
 import org.apache.spark.util.CarbonReflectionUtils
 
 import org.apache.carbondata.common.exceptions.sql.MalformedCarbonCommandException
 import org.apache.carbondata.common.logging.LogServiceFactory
-import org.apache.carbondata.core.datamap.Segment
 import org.apache.carbondata.core.datastore.impl.FileFactory
 import org.apache.carbondata.core.exception.ConcurrentOperationException
 import org.apache.carbondata.core.extrenalschema.{ExternalSchema, ExternalSchemaUpdator}
+import org.apache.carbondata.core.index.Segment
 import org.apache.carbondata.core.metadata.SegmentFileStore
 import org.apache.carbondata.core.metadata.schema.table.CarbonTable
 import org.apache.carbondata.core.mutate.CarbonUpdateUtil
@@ -47,7 +47,7 @@ import org.apache.carbondata.processing.util.CarbonLoaderUtil
 
 case class CarbonAddExternalStreamingSegmentCommand(dbName: Option[String],
     tableName: String,
-    querySchema:String,
+    querySchema: String,
     handOffSchema: Option[String],
     options: Map[String, String]) extends MetadataCommand {
 
@@ -74,7 +74,8 @@ case class CarbonAddExternalStreamingSegmentCommand(dbName: Option[String],
     if (!carbonTable.getTableInfo.isTransactionalTable) {
       throw new MalformedCarbonCommandException("Unsupported operation on non transactional table")
     }
-    if (carbonTable.hasMVCreated) {
+    // TODO how add validation with new code
+    if (carbonTable.isMV) {
       throw new MalformedCarbonCommandException("Unsupported operation on MV table")
     }
     // if insert overwrite in progress, do not allow add segment
@@ -92,7 +93,8 @@ case class CarbonAddExternalStreamingSegmentCommand(dbName: Option[String],
         "Invalid format: " + options.getOrElse("format", "HBase") + " Valid Formats are:" +
         supportedFormats)
     }
-    val schemaUpdator = ExternalSchemaUpdatorFactory.createFormatBasedHandler(externalFormat.toLowerCase(
+    val schemaUpdator = ExternalSchemaUpdatorFactory.createFormatBasedHandler(externalFormat
+      .toLowerCase(
       Locale.getDefault))
 
     if (querySchema.isEmpty) {
@@ -110,11 +112,13 @@ case class CarbonAddExternalStreamingSegmentCommand(dbName: Option[String],
       LOGGER.info(s"External Segment is already register for table: ${
         carbonTable.getTableUniqueName} : Only External Schema file will be updated")
     }
-    writeExternalSchema(carbonTable, new ExternalSchema(querySchema, handOffSchemaString, options.asJava))
+    writeExternalSchema(carbonTable,
+      new ExternalSchema(querySchema, handOffSchemaString, options.asJava))
     Seq.empty
   }
 
-  private def writeExternalSchema(carbonTable: CarbonTable, externalSchema: ExternalSchema): Unit = {
+  private def writeExternalSchema(carbonTable: CarbonTable,
+      externalSchema: ExternalSchema): Unit = {
     val metadataPath = CarbonTablePath.getMetadataPath(carbonTable.getTablePath)
     val metadataFolder = FileFactory.getCarbonFile(metadataPath)
     if (!metadataFolder.exists()) {
@@ -197,7 +201,7 @@ case class CarbonAddExternalStreamingSegmentCommand(dbName: Option[String],
       CarbonLoaderUtil.updateTableStatusForFailure(model, "uniqueTableStatusId")
       LOGGER.info("********starting clean up**********")
       // delete segment is applicable for transactional table
-      CarbonLoaderUtil.deleteSegment(model, model.getSegmentId.toInt)
+      CarbonLoaderUtil.deleteSegmentForFailure(model, model.getSegmentId.toInt)
       // delete corresponding segment file from metadata
       val segmentFile = CarbonTablePath.getSegmentFilesLocation(carbonTable.getTablePath) +
                         File.separator + segment.getSegmentFileName

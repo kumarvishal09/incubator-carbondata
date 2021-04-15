@@ -20,8 +20,10 @@ package org.apache.carbondata.tranaction;
 import java.util.ArrayList;
 import java.util.Arrays;
 
-import org.apache.carbondata.core.datamap.Segment;
+import org.apache.carbondata.common.logging.LogServiceFactory;
 import org.apache.carbondata.core.datastore.impl.FileFactory;
+import org.apache.carbondata.core.index.Segment;
+import org.apache.carbondata.core.locks.ICarbonLock;
 import org.apache.carbondata.core.statusmanager.LoadMetadataDetails;
 import org.apache.carbondata.core.statusmanager.SegmentStatus;
 import org.apache.carbondata.core.transaction.TransactionAction;
@@ -30,12 +32,17 @@ import org.apache.carbondata.events.OperationContext;
 import org.apache.carbondata.processing.loading.model.CarbonLoadModel;
 import org.apache.carbondata.processing.util.CarbonLoaderUtil;
 import org.apache.carbondata.spark.rdd.CarbonDataRDDFactory;
+import org.apache.carbondata.view.MVManagerInSpark;
 
 import org.apache.hadoop.conf.Configuration;
+import org.apache.log4j.Logger;
 import org.apache.spark.sql.SparkSession;
 import org.apache.spark.sql.execution.command.UpdateTableModel;
 
 public class LoadTransactionActions implements TransactionAction {
+
+  private static final Logger LOGGER =
+      LogServiceFactory.getLogService(LoadTransactionActions.class.getName());
 
   private SparkSession sparkSession;
 
@@ -57,11 +64,12 @@ public class LoadTransactionActions implements TransactionAction {
 
   private boolean isValidSegment;
 
+  private ICarbonLock segmentLock;
+
   public LoadTransactionActions(SparkSession sparkSession, CarbonLoadModel carbonLoadModel,
       LoadMetadataDetails loadMetadataDetails, boolean overwriteTable, String uuid,
-      UpdateTableModel tableModel,
-      String segmentFileName, OperationContext operationContext, Configuration configuration,
-      boolean isValidSegment) {
+      UpdateTableModel tableModel, String segmentFileName, OperationContext operationContext,
+      Configuration configuration, boolean isValidSegment, ICarbonLock segmentLock) {
     this.sparkSession = sparkSession;
     this.carbonLoadModel = carbonLoadModel;
     this.loadMetadataDetails = loadMetadataDetails;
@@ -72,25 +80,42 @@ public class LoadTransactionActions implements TransactionAction {
     this.configuration = configuration;
     this.tableModel = tableModel;
     this.isValidSegment = isValidSegment;
+    this.segmentLock = segmentLock;
   }
 
   public void commit() throws Exception {
-    SegmentStatus segmentStatus = loadMetadataDetails.getSegmentStatus();
-    if ((segmentStatus == SegmentStatus.MARKED_FOR_DELETE
-        || segmentStatus == SegmentStatus.LOAD_FAILURE) && isValidSegment) {
-      throw new Exception("Failed to commit transaction:");
+    try {
+      SegmentStatus segmentStatus = loadMetadataDetails.getSegmentStatus();
+      if ((segmentStatus == SegmentStatus.MARKED_FOR_DELETE
+          || segmentStatus == SegmentStatus.LOAD_FAILURE) && isValidSegment) {
+        throw new Exception("Failed to commit transaction:");
+      }
+      boolean isDone;
+      if (tableModel != null) {
+        isDone = CarbonLoaderUtil
+            .writeTableStatus(carbonLoadModel, loadMetadataDetails, overwriteTable,
+                tableModel.loadAsNewSegment(), Arrays.asList(tableModel.deletedSegments()), uuid,
+                tableModel.updatedTimeStamp());
+      } else {
+        isDone = CarbonLoaderUtil
+            .writeTableStatus(carbonLoadModel, loadMetadataDetails, overwriteTable, false,
+                new ArrayList<>(), uuid);
+      }
+      if (!isDone) {
+        String errorMessage = "Dataload failed due to failure in table status updation for"
+            + " ${carbonLoadModel.getTableName}";
+        LOGGER.error(errorMessage);
+        throw new Exception(errorMessage);
+      } else {
+        MVManagerInSpark.disableMVOnTable(sparkSession,
+            carbonLoadModel.getCarbonDataLoadSchema().getCarbonTable(), overwriteTable);
+      }
+      CarbonDataRDDFactory
+          .handlePostEvent(carbonLoadModel, operationContext, uuid, segmentFileName, true,
+              loadMetadataDetails.getSegmentStatus());
+    } finally {
+      segmentLock.unlock();
     }
-    if (tableModel != null) {
-      CarbonLoaderUtil.writeTableStatus(carbonLoadModel, loadMetadataDetails, overwriteTable,
-          tableModel.loadAsNewSegment(), Arrays.asList(tableModel.deletedSegments()), uuid,
-          tableModel.updatedTimeStamp());
-    } else {
-      CarbonLoaderUtil.writeTableStatus(carbonLoadModel, loadMetadataDetails, overwriteTable,
-          false, new ArrayList<>(), uuid);
-    }
-    CarbonDataRDDFactory
-        .handlePostEvent(carbonLoadModel, operationContext, uuid, true, segmentFileName,
-            sparkSession, loadMetadataDetails.getSegmentStatus(), configuration);
   }
 
   public void rollback() throws Exception {
@@ -100,8 +125,9 @@ public class LoadTransactionActions implements TransactionAction {
       return;
     }
     CarbonLoaderUtil.updateTableStatusForFailure(carbonLoadModel, uuid);
+    //TODO check the rollback scenario
     CarbonLoaderUtil
-        .deleteSegment(carbonLoadModel, Integer.parseInt(carbonLoadModel.getSegmentId()));
+        .deleteSegmentForFailure(carbonLoadModel, Integer.parseInt(carbonLoadModel.getSegmentId()));
     // delete corresponding segment file from metadata
     String segmentFile =
         CarbonTablePath.getSegmentFilesLocation(carbonLoadModel.getTablePath()) + "/"

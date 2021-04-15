@@ -52,7 +52,7 @@ import org.apache.carbondata.events.{IndexServerLoadEvent, OperationContext, Ope
 import org.apache.carbondata.hadoop.api.{CarbonInputFormat, CarbonTableInputFormat}
 import org.apache.carbondata.processing.exception.MultipleMatchingException
 import org.apache.carbondata.processing.loading.FailureCauses
-import org.apache.carbondata.spark.DeleteDelataResultImpl
+import org.apache.carbondata.spark.{DeleteDeltaResultImpl}
 import org.apache.carbondata.spark.util.CarbonSparkUtil
 import org.apache.carbondata.tranaction.SessionTransactionManager
 

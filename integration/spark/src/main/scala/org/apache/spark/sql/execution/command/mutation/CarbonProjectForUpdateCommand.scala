@@ -178,7 +178,12 @@ private[sql] case class CarbonProjectForUpdateCommand(
 
           updatedRowCount = updatedRowCountTemp
           updateTableModel =
-            UpdateTableModel(true, currentTime, executionErrors, segmentsToBeDeleted, Option.empty)
+            new UpdateTableModel(true,
+              currentTime,
+              executionErrors,
+              segmentsToBeDeleted.toArray,
+              Option.empty,
+              false)
           // do update operation.
           performUpdate(dataSet,
             databaseNameOp,
@@ -346,8 +351,6 @@ private[sql] case class CarbonProjectForUpdateCommand(
         relation.relation.asInstanceOf[CarbonDatasourceHadoopRelation]
       case _ => sys.error("")
     }
-
-    val updateTableModel = new UpdateTableModel(true, currentTime, executorErrors, deletedSegments.toArray)
 
     val header = getHeader(carbonRelation, plan)
     val fields = dataFrame.schema.fields

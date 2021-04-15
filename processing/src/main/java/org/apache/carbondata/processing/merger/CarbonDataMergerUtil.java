@@ -202,7 +202,7 @@ public final class CarbonDataMergerUtil {
         SegmentStatus status = SegmentStatus.SUCCESS;
         if (!carbonLoadModel.getCarbonDataLoadSchema().getCarbonTable().isHivePartitionTable()
             && carbonLoadModel.getCarbonDataLoadSchema().getCarbonTable().isTransactionalTable()
-            && !carbonLoadModel.getCarbonDataLoadSchema().getCarbonTable().isChildTableForMV()
+            && !carbonLoadModel.getCarbonDataLoadSchema().getCarbonTable().isMV()
             && !CarbonLoaderUtil.isValidSegment(carbonLoadModel, mergedLoadNumber)) {
           status = SegmentStatus.MARKED_FOR_DELETE;
         }

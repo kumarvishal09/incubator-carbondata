@@ -45,6 +45,6 @@ public class CompactionTransactionAction implements TransactionAction {
 
   @Override
   public void commit() throws Exception {
-    CarbonDataRDDFactory.runCompaction(sparkSession, carbonLoadModel, operationContext);
+    CarbonDataRDDFactory.runCompaction(sparkSession.sqlContext(), carbonLoadModel, operationContext);
   }
 }

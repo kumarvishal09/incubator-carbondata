@@ -42,6 +42,7 @@ public class PrePrimingAction implements TransactionAction {
 
   @Override
   public void commit() throws Exception {
-    CarbonDataRDDFactory.runPrePriming(sparkSession, carbonLoadModel, hadoopConf, operationContext);
+    CarbonDataRDDFactory
+        .runPrepriming(carbonLoadModel, sparkSession.sqlContext(), hadoopConf, operationContext);
   }
 }

@@ -16,7 +16,7 @@
  */
 package org.apache.carbondata.core.indexstore;
 
-import org.apache.carbondata.core.datamap.Segment;
+import org.apache.carbondata.core.index.Segment;
 import org.apache.carbondata.core.metadata.SegmentFileStore;
 
 public class PrunedSegmentInfo {

@@ -110,7 +110,7 @@ public final class CarbonCommonConstants {
   /**
    * default value
    */
-  public static final String CARBON_TIMESTAMP_DEFAULT_FORMAT = "yyyy-MM-dd HH:mm:ss:SSS";
+  public static final String CARBON_TIMESTAMP_DEFAULT_FORMAT = "yyyy-MM-dd HH:mm:ss";
 
   /**
    * CARBON_TIMESTAMP

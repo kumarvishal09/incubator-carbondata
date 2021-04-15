@@ -195,7 +195,8 @@ class CarbonTableCompactor(
       compactionModel.compactionType,
       compactionModel.currentPartitions,
       compactedSegments,
-      compactionModel.compactWithInSegment))
+      Option.empty,
+      compactionModel.compactWithInSegment)
     try {
       triggerCompaction(compactionCallableModel, mergedLoadName: String)
     } catch {
@@ -221,7 +222,7 @@ class CarbonTableCompactor(
     val tablePath = carbonLoadModel.getTablePath
     val startTime = System.nanoTime()
     val mergedLoads = compactionCallableModel.compactedSegments
-    val compactWithInSegment = compactionCallableModel. compactWithInSegment
+    val compactWithInSegment = compactionCallableModel.compactWithInSegment
     mergedLoads.add(mergedLoadName)
     var finalMergeStatus = false
     val databaseName: String = carbonLoadModel.getDatabaseName

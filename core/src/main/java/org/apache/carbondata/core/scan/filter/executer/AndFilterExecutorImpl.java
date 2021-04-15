@@ -75,11 +75,11 @@ public class AndFilterExecutorImpl implements FilterExecutor, ImplicitColumnFilt
 
   @Override
   public BitSet isScanRequired(MinMaxPruneMetadata minMaxPruneMetadata) {
-    BitSet leftFilters = leftExecuter.isScanRequired(minMaxPruneMetadata);
+    BitSet leftFilters = leftExecutor.isScanRequired(minMaxPruneMetadata);
     if (leftFilters.isEmpty()) {
       return leftFilters;
     }
-    BitSet rightFilter = rightExecuter.isScanRequired(minMaxPruneMetadata);
+    BitSet rightFilter = rightExecutor.isScanRequired(minMaxPruneMetadata);
     if (rightFilter.isEmpty()) {
       return rightFilter;
     }

@@ -308,7 +308,7 @@ public class RangeValueFilterExecutorImpl implements FilterExecutor {
           FilterUtil.compareValues(filterValues[1], blockMinValue, carbonDimension, true) >= 0))
           || ((lessThanEqualExp) && (
           FilterUtil.compareValues(filterValues[1], blockMinValue, carbonDimension, true) > 0)) || (
-          useMaxValidation || ((greaterThanExp) && (
+          useMaxValidation && ((greaterThanExp) && (
               FilterUtil.compareValues(filterValues[0], blockMaxValue, carbonDimension, false)
                   >= 0)) || ((greaterThanEqualExp) && (
               FilterUtil.compareValues(filterValues[0], blockMaxValue, carbonDimension, false)
@@ -324,7 +324,7 @@ public class RangeValueFilterExecutorImpl implements FilterExecutor {
           startBlockMinIsDefaultStart = true;
         }
 
-        if (useMaxValidation || ((((lessThanExp) && (
+        if (!useMaxValidation || ((((lessThanExp) && (
             FilterUtil.compareValues(filterValues[1], blockMaxValue, carbonDimension, false) > 0))
             || ((lessThanEqualExp) && (
             FilterUtil.compareValues(filterValues[1], blockMaxValue, carbonDimension, false)

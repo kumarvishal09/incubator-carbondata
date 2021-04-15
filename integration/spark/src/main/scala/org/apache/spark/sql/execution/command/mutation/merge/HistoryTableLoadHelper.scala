@@ -21,7 +21,9 @@ import scala.collection.JavaConverters._
 import org.apache.spark.CarbonInputMetrics
 import org.apache.spark.sql.{CarbonDatasourceHadoopRelation, Dataset, Row, SparkSession}
 import org.apache.spark.sql.catalyst.{InternalRow, TableIdentifier}
+import org.apache.spark.sql.catalyst.expressions.AttributeReference
 import org.apache.spark.sql.execution.LogicalRDD
+import org.apache.spark.sql.execution.command.management.CarbonInsertIntoWithDf
 import org.apache.spark.sql.optimizer.CarbonFilters
 
 import org.apache.carbondata.common.logging.LogServiceFactory
@@ -30,6 +32,7 @@ import org.apache.carbondata.core.metadata.schema.table.CarbonTable
 import org.apache.carbondata.hadoop.CarbonProjection
 import org.apache.carbondata.spark.rdd.CarbonDeltaRowScanRDD
 import org.apache.carbondata.spark.readsupport.SparkRowReadSupportImpl
+import org.apache.carbondata.spark.util.CarbonSparkUtil
 
 object HistoryTableLoadHelper {
 
@@ -44,7 +47,9 @@ object HistoryTableLoadHelper {
       carbonTable: CarbonTable,
       trxMgr: TranxManager,
       mutationAction: MutationAction,
-      mergeMatches: MergeDataSetMatches): Unit = {
+      mergeMatches: MergeDataSetMatches,
+      partition: Map[String, Option[String]] = Map.empty,
+      isOverwriteTable: Boolean = false): Unit = {
     if (!mutationAction.isInstanceOf[HandleUpdateAndDeleteAction]) {
       val insert = mergeMatches
         .matchList
@@ -58,6 +63,12 @@ object HistoryTableLoadHelper {
         .asInstanceOf[InsertInHistoryTableAction]
       // Get the history table DataFrame.
       val histDataFrame: Dataset[Row] = sparkSession.table(insert.historyTable)
+      val hisrltn = CarbonSparkUtil.collectCarbonRelation(histDataFrame.logicalPlan)
+      // Target dataset must be backed by carbondata table.
+      if (hisrltn.length != 1) {
+        throw new UnsupportedOperationException(
+          "Carbon table supposed to be present in merge dataset")
+      }
       // check if the user wants to insert update history records into history table.
       val updateDataFrame = if (trxMgr.getUpdateTrx != -1) {
         // Get the insertHistoryAction related to update action.
@@ -68,7 +79,7 @@ object HistoryTableLoadHelper {
           asInstanceOf[InsertInHistoryTableAction]
         // Create the DataFrame to fetch history updated records.
         Some(createHistoryDataFrame(sparkSession, rltn, carbonTable, insertHist,
-          histDataFrame, trxMgr.getUpdateTrx))
+          histDataFrame, trxMgr.getUpdateTrx, trxMgr.getLatestTrx, partition))
       } else {
         None
       }
@@ -80,7 +91,7 @@ object HistoryTableLoadHelper {
         }.head.getActions.filter(_.isInstanceOf[InsertInHistoryTableAction]).head.
           asInstanceOf[InsertInHistoryTableAction]
         Some(createHistoryDataFrame(sparkSession, rltn, carbonTable, insertHist,
-          histDataFrame: Dataset[Row], trxMgr.getDeleteTrx))
+          histDataFrame: Dataset[Row], trxMgr.getDeleteTrx, trxMgr.getLatestTrx, partition))
       } else {
         None
       }
@@ -92,11 +103,17 @@ object HistoryTableLoadHelper {
         case _ => throw new CarbonMergeDataSetException("Some thing is wrong")
       }
 
-      val alias = carbonTable.getTableName + System.currentTimeMillis()
-      unionDf.createOrReplaceTempView(alias)
       val start = System.currentTimeMillis()
-      sparkSession.sql(s"insert into ${ insert.historyTable.quotedString } " +
-                       s"select * from ${ alias }")
+      val header = histDataFrame.queryExecution.analyzed.output.map(_.name).mkString(",")
+      CarbonInsertIntoWithDf(
+        databaseNameOp = Some(hisrltn.head.carbonTable.getDatabaseName),
+        tableName = hisrltn.head.carbonTable.getTableName,
+        options = Map(("fileheader" -> header)),
+        partition = partition,
+        isOverwriteTable = isOverwriteTable,
+        dataFrame = unionDf,
+        updateModel = None,
+        tableInfoOp = Some(hisrltn.head.carbonTable.getTableInfo)).process(sparkSession)
       LOGGER.info("Time taken to insert into history table " + (System.currentTimeMillis() - start))
     }
   }
@@ -109,7 +126,9 @@ object HistoryTableLoadHelper {
       carbonTable: CarbonTable,
       insertHist: InsertInHistoryTableAction,
       histDataFrame: Dataset[Row],
-      factTimestamp: Long) = {
+      factTimestamp: Long,
+      updateTimeStamp: Long,
+      partition: Map[String, Option[String]] = Map.empty) = {
     val rdd1 = new CarbonDeltaRowScanRDD[InternalRow](sparkSession,
       carbonTable.getTableInfo.serialize(),
       carbonTable.getTableInfo,
@@ -124,11 +143,16 @@ object HistoryTableLoadHelper {
       new CarbonInputMetrics,
       classOf[SparkDataTypeConverterImpl],
       classOf[SparkRowReadSupportImpl],
-      factTimestamp.toString)
+      factTimestamp.toString,
+      updateTimeStamp)
     val frame1 = Dataset.ofRows(sparkSession,
       LogicalRDD(rltn.carbonRelation.output, rdd1)(sparkSession))
     val histOutput = histDataFrame.queryExecution.analyzed.output
-    val cols = histOutput.map { a =>
+    val set = partition.keySet
+    val attributes = histOutput.filter(attr => !set.contains(attr
+      .asInstanceOf[AttributeReference]
+      .name))
+    val cols = attributes.map { a =>
       insertHist.insertMap.find(p => p._1.toString().equalsIgnoreCase(a.name)) match {
         case Some((k, v)) => v
         case _ =>

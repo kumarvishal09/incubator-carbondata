@@ -820,9 +820,10 @@ public class SegmentFileStore {
   public List<String> readIndexFiles(SegmentStatus status, boolean ignoreStatus,
       Configuration configuration) throws IOException {
     if (indexFilesMap != null) {
-      return new HashSet<>();
+      return new ArrayList<>();
     }
-    Set<String> indexOrMergeFiles = new HashSet<>();
+    // TODO can take the dbs code
+    List<String> indexOrMergeFiles = new ArrayList<>();
     SegmentIndexFileStore indexFileStore = new SegmentIndexFileStore();
     indexFilesMap = new HashMap<>();
     indexFileStore.readAllIIndexOfSegment(this.segmentFile, tablePath, status, ignoreStatus);
@@ -1065,7 +1066,7 @@ public class SegmentFileStore {
         // take the list of files from this segment.
         SegmentFileStore fileStore =
             new SegmentFileStore(table.getTablePath(), segment.getSegmentFile());
-        Set<String> indexOrMergeFiles = fileStore
+        List<String> indexOrMergeFiles = fileStore
             .readIndexFiles(SegmentStatus.MARKED_FOR_DELETE, false, FileFactory.getConfiguration());
         if (forceDelete) {
           deletePhysicalPartition(
@@ -1165,7 +1166,7 @@ public class SegmentFileStore {
       List<PartitionSpec> partitionSpecs,
       SegmentUpdateStatusManager updateStatusManager) throws Exception {
     SegmentFileStore fileStore = new SegmentFileStore(tablePath, segment.getSegmentFileName());
-    Set<String> indexOrMergeFiles = fileStore.readIndexFiles(SegmentStatus.SUCCESS, true,
+    List<String> indexOrMergeFiles = fileStore.readIndexFiles(SegmentStatus.SUCCESS, true,
         FileFactory.getConfiguration());
     Map<String, List<String>> indexFilesMap = fileStore.getIndexFilesMap();
     List<String> deletedFiles = new ArrayList<>();

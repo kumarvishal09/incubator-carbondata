@@ -31,7 +31,6 @@ import scala.math.BigDecimal.RoundingMode
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.mapreduce.lib.input.FileInputFormat
-import org.apache.spark.sql.{CarbonEnv, SparkSession}
 import org.apache.spark.{SparkContext, SparkEnv}
 import org.apache.spark.sql.catalyst.{InternalRow, TableIdentifier}
 import org.apache.spark.sql.catalyst.expressions.{Expression, UnsafeArrayData, UnsafeMapData, UnsafeRow}

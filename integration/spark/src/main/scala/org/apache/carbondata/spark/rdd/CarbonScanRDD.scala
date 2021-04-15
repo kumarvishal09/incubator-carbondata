@@ -106,6 +106,8 @@ class CarbonScanRDD[T: ClassTag](
   // Which will be same as output committer segment file name.
   private var currentSegmentFileName: String = _
 
+  private var prunedSegment: Array[Segment] = _
+
   @transient val LOGGER = LogServiceFactory.getLogService(this.getClass.getName)
 
   override def internalGetPartitions: Array[Partition] = {
@@ -147,6 +149,11 @@ class CarbonScanRDD[T: ClassTag](
           CarbonInputFormat
             .setValidateSegmentsToAccess(job.getConfiguration, validateSegmentToAccess)
         }
+      }
+
+      if (null != prunedSegment) {
+        CarbonInputFormat.setPrunedSegments(job.getConfiguration, prunedSegment.toList.asJava)
+        CarbonInputFormat.setValidateSegmentsToAccess(job.getConfiguration, false)
       }
       // get splits
       getSplitsStartTime = System.currentTimeMillis()
@@ -251,6 +258,10 @@ class CarbonScanRDD[T: ClassTag](
 
   def setSegmentsToAccess(segments: Array[Segment]): Unit = {
     segmentsToAccess = segments
+  }
+
+  def setPrunedSegment(segments: Array[Segment]): Unit = {
+    prunedSegment = segments
   }
 
   private def distributeColumnarSplits(splits: List[InputSplit]): mutable.Buffer[Partition] = {

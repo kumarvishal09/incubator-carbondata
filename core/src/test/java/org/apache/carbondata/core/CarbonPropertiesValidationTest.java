@@ -24,6 +24,7 @@ import org.apache.carbondata.core.constants.CarbonCommonConstants;
 import org.apache.carbondata.core.util.CarbonProperties;
 
 import junit.framework.TestCase;
+import org.junit.Ignore;
 import org.junit.Test;
 
 /**
@@ -82,29 +83,30 @@ public class CarbonPropertiesValidationTest extends TestCase {
         CarbonCommonConstants.CARBON_ENABLE_MV_DEFAULT.equalsIgnoreCase(valueAfterValidation));
   }
 
-  @Test public void testValidateEnableOffHeapSort()
-      throws NoSuchMethodException, InvocationTargetException, IllegalAccessException {
-    Method validateMethodType =
-        carbonProperties.getClass().getDeclaredMethod("validateEnableOffHeapSort");
-    validateMethodType.setAccessible(true);
-    carbonProperties.addProperty(CarbonCommonConstants.ENABLE_OFFHEAP_SORT, "True");
-    assert (carbonProperties.getProperty(CarbonCommonConstants.ENABLE_OFFHEAP_SORT)
-        .equalsIgnoreCase("true"));
-    carbonProperties.addProperty(CarbonCommonConstants.ENABLE_OFFHEAP_SORT, "false");
-    assert (carbonProperties.getProperty(CarbonCommonConstants.ENABLE_OFFHEAP_SORT)
-        .equalsIgnoreCase("false"));
-    carbonProperties.addProperty(CarbonCommonConstants.ENABLE_OFFHEAP_SORT, "xyz");
-    assert (carbonProperties.getProperty(CarbonCommonConstants.ENABLE_OFFHEAP_SORT)
-        .equalsIgnoreCase("true"));
-    String valueBeforeValidation =
-        carbonProperties.getProperty(CarbonCommonConstants.ENABLE_OFFHEAP_SORT);
-    validateMethodType.invoke(carbonProperties);
-    String valueAfterValidation =
-        carbonProperties.getProperty(CarbonCommonConstants.ENABLE_OFFHEAP_SORT);
-    assertTrue(valueBeforeValidation.equals(valueAfterValidation));
-    assertTrue(
-        CarbonCommonConstants.ENABLE_OFFHEAP_SORT_DEFAULT.equalsIgnoreCase(valueAfterValidation));
-  }
+//  @Ignore
+//  @Test public void testValidateEnableOffHeapSort()
+//      throws NoSuchMethodException, InvocationTargetException, IllegalAccessException {
+//    Method validateMethodType =
+//        carbonProperties.getClass().getDeclaredMethod("validateEnableOffHeapSort");
+//    validateMethodType.setAccessible(true);
+//    carbonProperties.addProperty(CarbonCommonConstants.ENABLE_OFFHEAP_SORT, "True");
+//    assert (carbonProperties.getProperty(CarbonCommonConstants.ENABLE_OFFHEAP_SORT)
+//        .equalsIgnoreCase("true"));
+//    carbonProperties.addProperty(CarbonCommonConstants.ENABLE_OFFHEAP_SORT, "false");
+//    assert (carbonProperties.getProperty(CarbonCommonConstants.ENABLE_OFFHEAP_SORT)
+//        .equalsIgnoreCase("false"));
+//    carbonProperties.addProperty(CarbonCommonConstants.ENABLE_OFFHEAP_SORT, "xyz");
+//    assert (carbonProperties.getProperty(CarbonCommonConstants.ENABLE_OFFHEAP_SORT)
+//        .equalsIgnoreCase("true"));
+//    String valueBeforeValidation =
+//        carbonProperties.getProperty(CarbonCommonConstants.ENABLE_OFFHEAP_SORT);
+//    validateMethodType.invoke(carbonProperties);
+//    String valueAfterValidation =
+//        carbonProperties.getProperty(CarbonCommonConstants.ENABLE_OFFHEAP_SORT);
+//    assertTrue(valueBeforeValidation.equals(valueAfterValidation));
+//    assertTrue(
+//        CarbonCommonConstants.ENABLE_OFFHEAP_SORT_DEFAULT.equalsIgnoreCase(valueAfterValidation));
+//  }
 
   @Test public void testValidateCustomBlockDistribution()
       throws NoSuchMethodException, InvocationTargetException, IllegalAccessException {

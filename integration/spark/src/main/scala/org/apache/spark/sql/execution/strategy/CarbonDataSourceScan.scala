@@ -29,12 +29,10 @@ import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning, UnknownPartitioning}
 import org.apache.spark.sql.execution.{ColumnarBatchScan, DataSourceScanExec, WholeStageCodegenExec}
 import org.apache.spark.sql.optimizer.CarbonFilters
-import org.apache.spark.sql.types.AtomicType
 
-import org.apache.carbondata.core.index.IndexFilter
+import org.apache.carbondata.core.index.{IndexFilter, Segment}
 import org.apache.carbondata.core.indexstore.PartitionSpec
 import org.apache.carbondata.core.metadata.schema.BucketingInfo
-import org.apache.carbondata.core.readcommitter.ReadCommittedScope
 import org.apache.carbondata.core.scan.expression.Expression
 import org.apache.carbondata.core.scan.expression.logical.AndExpression
 import org.apache.carbondata.hadoop.CarbonProjection
@@ -49,12 +47,12 @@ case class CarbonDataSourceScan(
     output: Seq[Attribute],
     partitionFilters: Seq[SparkExpression],
     dataFilters: Seq[SparkExpression],
-    @transient readComittedScope: ReadCommittedScope,
     @transient pushedDownProjection: CarbonProjection,
     @transient pushedDownFilters: Seq[Expression],
     directScanSupport: Boolean,
     @transient extraRDD: Option[(RDD[InternalRow], Boolean)] = None,
-    tableIdentifier: Option[TableIdentifier] = None)
+    tableIdentifier: Option[TableIdentifier] = None,
+    segments: Array[Segment])
   extends DataSourceScanExec with ColumnarBatchScan {
 
   override lazy val supportsBatch: Boolean = {
@@ -132,6 +130,7 @@ case class CarbonDataSourceScan(
       selectedPartitions)
     carbonRdd.setVectorReaderSupport(supportsBatch)
     carbonRdd.setDirectScanSupport(supportsBatch && directScanSupport)
+    carbonRdd.setPrunedSegment(segments)
     extraRDD.map(_._1.union(carbonRdd)).getOrElse(carbonRdd)
   }
 
@@ -172,9 +171,9 @@ case class CarbonDataSourceScan(
       QueryPlan.normalizePredicates(dataFilters, output),
       null,
       null,
-      null,
       directScanSupport,
       extraRDD,
-      tableIdentifier)
+      tableIdentifier,
+      segments)
   }
 }

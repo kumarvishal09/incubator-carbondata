@@ -4,9 +4,10 @@ import org.apache.hadoop.hbase.HBaseTestingUtility
 import org.apache.spark.sql.execution.command.management.CarbonAddExternalStreamingSegmentCommand
 import org.apache.spark.sql.execution.datasources.hbase.{HBaseRelation, HBaseTableCatalog, HandOffOptions, HandoffHbaseSegmentCommand, SparkHBaseConf}
 import org.apache.spark.sql.test.util.QueryTest
+import org.junit.Ignore
 import org.scalatest.BeforeAndAfterAll
 
-
+@Ignore
 class DemoCarbonHBase extends QueryTest with BeforeAndAfterAll {
 
   var htu: HBaseTestingUtility = _

@@ -64,4 +64,8 @@ public class BlockMappingVO {
   public Map<String, String> getBlockToSegmentMapping() {
     return blockToSegmentMapping;
   }
+
+  public BlockMappingVO() {
+    this(new HashMap<>(), new HashMap<>());
+  }
 }
