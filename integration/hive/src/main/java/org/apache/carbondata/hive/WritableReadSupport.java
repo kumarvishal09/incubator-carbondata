@@ -233,17 +233,17 @@ public class WritableReadSupport<T> implements CarbonReadSupport<T> {
     } else if (dataType == DataTypes.BINARY) {
       return new BytesWritable((byte[]) obj);
     } else if (dataType == DataTypes.DATE) {
-      return new DateWritable((Integer) obj);
+      return new DateWritableV2((Integer) obj);
     } else if (dataType == DataTypes.TIMESTAMP) {
       //TODO check with ravi
-//      SimpleDateFormat dateFormat =
-//          new SimpleDateFormat(CarbonCommonConstants.CARBON_TIMESTAMP_DEFAULT_FORMAT);
-//      String formattedTime = dateFormat.format((long) obj / 1000);
-//      org.apache.hadoop.hive.common.type.Timestamp t =
-//          org.apache.hadoop.hive.common.type.Timestamp.valueOf(formattedTime);
-//      return new TimestampWritableV2(t);
-      WritableTimestampObjectInspector ins = new WritableTimestampObjectInspector();
-      return ins.getPrimitiveWritableObject(ins.create(new Timestamp((long) obj / 1000)));
+      SimpleDateFormat dateFormat =
+          new SimpleDateFormat(CarbonCommonConstants.CARBON_TIMESTAMP_DEFAULT_FORMAT);
+      String formattedTime = dateFormat.format((long) obj / 1000);
+      org.apache.hadoop.hive.common.type.Timestamp t =
+          org.apache.hadoop.hive.common.type.Timestamp.valueOf(formattedTime);
+      return new TimestampWritableV2(t);
+//      WritableTimestampObjectInspector ins = new WritableTimestampObjectInspector();
+//      return ins.getPrimitiveWritableObject(ins.create(new Timestamp((long) obj / 1000)));
     } else if (dataType == DataTypes.STRING) {
       return new Text(obj.toString());
     } else if (DataTypes.isArrayType(dataType)) {
