@@ -20,6 +20,7 @@ package org.apache.carbondata.core.scan.result.iterator;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -103,7 +104,7 @@ public class RawResultIterator extends CarbonIterator<Object[]> {
   }
 
   protected void init() {
-    if (!isExecuted) {
+    if (!isExecuted && Objects.isNull(detailRawQueryResultIterator)) {
       try {
         this.detailRawQueryResultIterator = queryExecutor.execute(queryModel);
       } catch (IOException e) {

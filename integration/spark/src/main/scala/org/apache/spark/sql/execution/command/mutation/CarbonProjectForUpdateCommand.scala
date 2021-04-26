@@ -183,7 +183,7 @@ private[sql] case class CarbonProjectForUpdateCommand(
               executionErrors,
               segmentsToBeDeleted.toArray,
               Option.empty,
-              false)
+              true)
           // do update operation.
           performUpdate(dataSet,
             databaseNameOp,

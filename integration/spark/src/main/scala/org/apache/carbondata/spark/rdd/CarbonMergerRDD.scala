@@ -227,9 +227,9 @@ class CarbonMergerRDD[K, V](
           carbonTable, carbonLoadModel.getTaskNo, mergeNumber, true, false)
 
        checkAndUpdatePartitionLocation(partitionSpec)
-        if (carbonTable.getSortScope == SortScopeOptions.SortScope.NO_SORT ||
-          rawResultIteratorMap.get(CarbonCompactionUtil.UNSORTED_IDX).size() == 0) {
-
+        if(carbonTable.getSortScope == SortScopeOptions.SortScope.NO_SORT || (
+          rawResultIteratorMap.get(CarbonCompactionUtil.UNSORTED_IDX).size() > 0 &&
+          rawResultIteratorMap.get(CarbonCompactionUtil.SORTED_IDX).size() == 0)) {
           LOGGER.info("NoSortMergerProcessor flow is selected")
           processor = new NoSortMergerProcessor(
             factTableName,
@@ -238,9 +238,18 @@ class CarbonMergerRDD[K, V](
             carbonLoadModel,
             carbonMergerMapping.compactionType,
             partitionSpec)
-
+        } else if (carbonTable.getSortScope == SortScopeOptions.SortScope.NO_SORT ||
+                   rawResultIteratorMap.get(CarbonCompactionUtil.UNSORTED_IDX).size() == 0) {
+          LOGGER.info("RowResultMergerProcessor flow is selected")
+          processor = new RowResultMergerProcessor(
+            databaseName,
+            factTableName,
+            segmentProperties,
+            tempStoreLoc,
+            carbonLoadModel,
+            carbonMergerMapping.compactionType,
+            partitionSpec)
         } else {
-
           LOGGER.info("CompactionResultSortProcessor flow is selected")
           processor = new CompactionResultSortProcessor(
             carbonLoadModel,

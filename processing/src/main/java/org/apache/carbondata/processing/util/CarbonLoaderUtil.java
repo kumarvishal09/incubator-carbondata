@@ -122,7 +122,9 @@ public final class CarbonLoaderUtil {
    */
   public static boolean isValidSegment(CarbonLoadModel loadModel,
       String currentLoad) {
-
+    if(loadModel.getCarbonDataLoadSchema().getCarbonTable().isSupportFlatFolder()) {
+      return true;
+    }
     int fileCount = 0;
     String segmentPath = CarbonTablePath.getSegmentPath(
         loadModel.getTablePath(), currentLoad);
