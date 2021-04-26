@@ -17,7 +17,7 @@
 
 package org.apache.carbondata.spark.rdd
 
-import java.util.{ArrayList, Date, List}
+import java.util.{ArrayList, Date, List, Objects}
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
@@ -152,8 +152,11 @@ class CarbonScanRDD[T: ClassTag](
       }
 
       if (null != prunedSegment) {
-        CarbonInputFormat.setPrunedSegments(job.getConfiguration, prunedSegment.toList.asJava)
-        CarbonInputFormat.setValidateSegmentsToAccess(job.getConfiguration, false)
+        if (!(!tableInfo.isTransactionalTable &&
+              (Objects.nonNull(prunedSegment) || prunedSegment.length == 0))) {
+          CarbonInputFormat.setPrunedSegments(job.getConfiguration, prunedSegment.toList.asJava)
+          CarbonInputFormat.setValidateSegmentsToAccess(job.getConfiguration, true)
+        }
       }
       // get splits
       getSplitsStartTime = System.currentTimeMillis()

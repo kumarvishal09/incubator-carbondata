@@ -832,10 +832,10 @@ object CarbonDataRDDFactory {
     CarbonLoaderUtil
       .addDataIndexSizeIntoMetaEntry(metadataDetails, carbonLoadModel.getSegmentId, carbonTable)
     metadataDetails.setLoadName(carbonLoadModel.getSegmentId)
-    if (!carbonLoadModel.isCarbonTransactionalTable && overwriteTable) {
-      CarbonLoaderUtil.deleteNonTransactionalTableForInsertOverwrite(carbonLoadModel)
-    }
     if(writeToFile) {
+      if (!carbonLoadModel.isCarbonTransactionalTable && overwriteTable) {
+        CarbonLoaderUtil.deleteNonTransactionalTableForInsertOverwrite(carbonLoadModel)
+      }
       var done = true
       // If the updated data should be added as new segment then update the segment information
       if (updateModel.isDefined) {

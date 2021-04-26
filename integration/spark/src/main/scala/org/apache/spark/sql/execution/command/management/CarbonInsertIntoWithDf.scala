@@ -185,11 +185,7 @@ case class CarbonInsertIntoWithDf(databaseNameOp: Option[String],
 
   def insertData(loadParams: CarbonLoadParams): (Seq[Row], LoadMetadataDetails) = {
     var rows = Seq.empty[Row]
-    val loadDataFrame = if (updateModel.isDefined && !updateModel.get.loadAsNewSegment) {
-      Some(CommonLoadUtils.getDataFrameWithTupleID(Some(dataFrame)))
-    } else {
-      Some(dataFrame)
-    }
+    val loadDataFrame = Some(dataFrame)
     val table = loadParams.carbonLoadModel.getCarbonDataLoadSchema.getCarbonTable
     var loadResult : LoadMetadataDetails = null
     loadParams.dataFrame = loadDataFrame

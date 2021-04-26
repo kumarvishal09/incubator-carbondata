@@ -178,12 +178,12 @@ private[sql] case class CarbonProjectForUpdateCommand(
 
           updatedRowCount = updatedRowCountTemp
           updateTableModel =
-            new UpdateTableModel(true,
-              currentTime,
-              executionErrors,
-              segmentsToBeDeleted.toArray,
-              Option.empty,
-              false)
+              new UpdateTableModel(true,
+                currentTime,
+                executionErrors,
+                segmentsToBeDeleted.toArray,
+                Option.empty,
+                true)
           // do update operation.
           performUpdate(dataSet,
             databaseNameOp,

@@ -148,7 +148,7 @@ public class PartitionTransactionAction implements TransactionAction {
     if (updateTime != null) {
       //TODO CHECK updateTime OR updatedTimeStamp TIME REQUIRED FOR UPDATTION
       CarbonUpdateUtil.updateTableMetadataStatus(Collections.singleton(carbonLoadModel.getSegment()),
-          carbonTable, updatedTimeStamp, true,
+          carbonTable, updateTime, true,
           isUpdateStatusFileUpdateRequired, segmentDeleteList);
     }
   }
